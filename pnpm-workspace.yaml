@@ -1,0 +1,7 @@
+# 共享 workspace：契约、核心、模拟、服务端、工具、端到端。
+# client/ 是 Cocos Creator 工程，独立管理，不进入 pnpm workspace（见 docs/CONTRACT.md §2）。
+packages:
+  - 'packages/*'
+  - 'server'
+  - 'tools'
+  - 'tests/e2e'

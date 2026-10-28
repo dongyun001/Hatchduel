@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@petbattle/core": ["packages/core/src/index.ts"],
+      "@petbattle/protocol": ["packages/protocol/src/index.ts"],
+      "@petbattle/sim": ["packages/sim/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "server/src/**/*.ts",
+    "server/test/**/*.ts",
+    "tools/src/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "**/dist/**", "client/**"]
+}
