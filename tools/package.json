@@ -1,0 +1,13 @@
+{
+  "name": "@petbattle/tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "内容与校验工具（M0 只有配置校验；其余由 D 会话扩展）。",
+  "scripts": {
+    "validate:config": "tsx src/validate-config.ts"
+  },
+  "dependencies": {
+    "@petbattle/core": "workspace:*"
+  }
+}

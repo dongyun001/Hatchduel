@@ -1,0 +1,32 @@
+[
+  {
+    "id": "passive_turtle_shell",
+    "name": "厚甲",
+    "description": "建战时防御 +8%。",
+    "statMods": { "def": 1.08 }
+  },
+  {
+    "id": "passive_fish_flow",
+    "name": "顺流",
+    "description": "建战时速度 +6%。",
+    "statMods": { "spd": 1.06 }
+  },
+  {
+    "id": "passive_frog_skin",
+    "name": "湿滑皮肤",
+    "description": "建战时闪避 +5%。",
+    "statMods": { "dodge": 1.05 }
+  },
+  {
+    "id": "passive_cat_reflex",
+    "name": "猫科反射",
+    "description": "建战时暴击率 +10%。",
+    "statMods": { "crit": 1.1 }
+  },
+  {
+    "id": "passive_snake_instinct",
+    "name": "猎手本能",
+    "description": "建战时攻击 +5%。",
+    "statMods": { "atk": 1.05 }
+  }
+]

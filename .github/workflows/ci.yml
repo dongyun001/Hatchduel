@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Validate config
+        run: pnpm validate:config
+
+      - name: Server smoke (/health)
+        run: |
+          pnpm --filter @petbattle/server start &
+          SERVER_PID=$!
+          HEALTH_OK=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/health -o /tmp/health.json; then
+              HEALTH_OK=1
+              break
+            fi
+            sleep 1
+          done
+          cat /tmp/health.json || true
+          kill "$SERVER_PID" || true
+          if [ "$HEALTH_OK" != "1" ]; then
+            echo "server did not become healthy in 30s" >&2
+            exit 1
+          fi
+          grep -q 'ok' /tmp/health.json

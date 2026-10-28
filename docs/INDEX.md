@@ -23,6 +23,7 @@
 | [ART_SPEC.md](./ART_SPEC.md) | 资源清单、尺寸、动画、包体预算 | 美术/开发 |
 | [COLLABORATION.md](./COLLABORATION.md) | 分工、目录所有权、合并规则、会话模板 | 所有人/并行会话 |
 | [PITFALLS.md](./PITFALLS.md) | 踩坑记录、规避方法、领域检查清单 | 所有人 |
+| [CONTRACT.md](./CONTRACT.md) | **contract-v1 冻结内容**：protocol/core/配置接口清单、各会话接手点、变更流程 | A/B/C/D/E 与所有并行会话 |
 | [AGENTS.md](../AGENTS.md) | AI 工作约定、硬性规则、验收与汇报格式 | AI/维护者 |
 
 文档冲突时以 `PRD.md` 为准，并回头修订其他文档。
@@ -37,10 +38,11 @@
 
 ## 当前状态
 
-- 文档版本：v1.2（MVP 物种收窄为 5 种；根 README 面向玩家/客户，本页为开发文档索引）。
+- 文档版本：v1.3（新增 `docs/CONTRACT.md`，contract-v1 已冻结）。
+- M0 契约：`contract-v1` 冻结于 2026-10-28；仓库骨架、protocol/core 公共契约、配置校验、server Hello、CI 已就绪，A/B/C/D 可并行开工。
 - 已定：Demo 免费、像素风、MVP 物种 5 种（龟/鱼/青蛙/猫/蛇）、宠物不死亡可放生、不做主动治疗、性别保留、简体中文、2C2G Demo 服务器、不做转生、实时房间后置、交易后做。
 - 仍待定：正式版商业模式、Steam 首发地区、交易形态、扩容阈值。
-- 下一步（M0）：Cocos 工程 + `packages/core` 骨架 + 服务器 Hello + CI + 像素样张/规格。
+- 下一步：B 会话创建 Cocos 工程（本机无 Cocos，`client/README.md` 已说明）；A 按 `docs/CONTRACT.md` §8.1 补齐 core 实现。
 
 ## 建议阅读顺序
 
@@ -52,9 +54,11 @@
 5. 美术介入前读 `ART_SPEC.md`。
 6. 开并行会话前读 `COLLABORATION.md`，按目录所有权和会话模板分工。
 7. AI 会话先读 `AGENTS.md`；开工前读 `PITFALLS.md` 对应领域。
+8. 并行会话开工前必读 `CONTRACT.md`（接口清单、接手点、变更流程）；契约以代码为准。
 
 ## 变更记录
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
 | v1.2 | 2026-10-28 | MVP 物种收窄为 5 种；同步 README/INDEX/AGENTS 的已定决策 |
+| v1.3 | 2026-10-28 | 新增 CONTRACT.md 索引；记录 contract-v1 冻结与 M0 骨架状态 |

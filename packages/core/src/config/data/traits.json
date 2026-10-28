@@ -1,0 +1,52 @@
+[
+  {
+    "id": "trait_sturdy",
+    "name": "强健",
+    "rarity": "common",
+    "description": "防御 +5%。",
+    "statMods": { "def": 1.05 },
+    "inheritance": { "weight": 0.5 }
+  },
+  {
+    "id": "trait_swift",
+    "name": "轻快",
+    "rarity": "common",
+    "description": "速度 +4%。",
+    "statMods": { "spd": 1.04 },
+    "inheritance": { "weight": 0.5 }
+  },
+  {
+    "id": "trait_gourmand",
+    "name": "贪吃",
+    "rarity": "common",
+    "description": "生命 +5%，栖息地产出 +10%。",
+    "statMods": { "hp": 1.05 },
+    "productionMod": 1.1,
+    "inheritance": { "weight": 0.5 }
+  },
+  {
+    "id": "trait_lucky",
+    "name": "幸运",
+    "rarity": "rare",
+    "description": "暴击率 +5%。",
+    "statMods": { "crit": 1.05 },
+    "inheritance": { "weight": 0.25 }
+  },
+  {
+    "id": "trait_industrious",
+    "name": "勤劳",
+    "rarity": "rare",
+    "description": "栖息地产出 +20%。",
+    "productionMod": 1.2,
+    "inheritance": { "weight": 0.25 }
+  },
+  {
+    "id": "trait_legendary_blood",
+    "name": "传奇血统",
+    "rarity": "epic",
+    "description": "生命与攻击 +10%，产出 +15%。",
+    "statMods": { "hp": 1.1, "atk": 1.1 },
+    "productionMod": 1.15,
+    "inheritance": { "weight": 0.1 }
+  }
+]

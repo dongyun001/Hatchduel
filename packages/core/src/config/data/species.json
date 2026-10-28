@@ -1,0 +1,72 @@
+[
+  {
+    "id": "turtle",
+    "name": "龟",
+    "grade": { "hp": "A", "atk": "C", "def": "S", "spd": "D" },
+    "base": { "hp": 115, "atk": 17, "def": 16, "spd": 7, "crit": 0.05, "critDmg": 1.5, "hit": 0, "dodge": 0.02 },
+    "growth": { "hp": 0.08, "atk": 0.08, "def": 0.08, "spd": 0.08 },
+    "signatureSkillId": "turtle_shell_bash",
+    "passiveId": "passive_turtle_shell",
+    "counters": ["fish"],
+    "habitatTags": ["water", "earth"],
+    "rarity": "common",
+    "breedable": true,
+    "spriteId": "turtle"
+  },
+  {
+    "id": "fish",
+    "name": "鱼",
+    "grade": { "hp": "D", "atk": "B", "def": "D", "spd": "A" },
+    "base": { "hp": 72, "atk": 20, "def": 9, "spd": 12, "crit": 0.05, "critDmg": 1.5, "hit": 0, "dodge": 0.05 },
+    "growth": { "hp": 0.08, "atk": 0.08, "def": 0.08, "spd": 0.08 },
+    "signatureSkillId": "fish_tide",
+    "passiveId": "passive_fish_flow",
+    "counters": ["frog"],
+    "habitatTags": ["water"],
+    "rarity": "common",
+    "breedable": true,
+    "spriteId": "fish"
+  },
+  {
+    "id": "frog",
+    "name": "青蛙",
+    "grade": { "hp": "C", "atk": "C", "def": "C", "spd": "B" },
+    "base": { "hp": 85, "atk": 17, "def": 10, "spd": 10, "crit": 0.05, "critDmg": 1.5, "hit": 0, "dodge": 0.04 },
+    "growth": { "hp": 0.08, "atk": 0.08, "def": 0.08, "spd": 0.08 },
+    "signatureSkillId": "frog_croak",
+    "passiveId": "passive_frog_skin",
+    "counters": [],
+    "habitatTags": ["water", "grass"],
+    "rarity": "common",
+    "breedable": true,
+    "spriteId": "frog"
+  },
+  {
+    "id": "cat",
+    "name": "猫",
+    "grade": { "hp": "C", "atk": "A", "def": "D", "spd": "A" },
+    "base": { "hp": 85, "atk": 23, "def": 9, "spd": 12, "crit": 0.06, "critDmg": 1.5, "hit": 0, "dodge": 0.06 },
+    "growth": { "hp": 0.08, "atk": 0.08, "def": 0.08, "spd": 0.08 },
+    "signatureSkillId": "cat_pounce",
+    "passiveId": "passive_cat_reflex",
+    "counters": ["snake"],
+    "habitatTags": ["fire", "earth"],
+    "rarity": "rare",
+    "breedable": true,
+    "spriteId": "cat"
+  },
+  {
+    "id": "snake",
+    "name": "蛇",
+    "grade": { "hp": "C", "atk": "B", "def": "C", "spd": "B" },
+    "base": { "hp": 85, "atk": 20, "def": 10, "spd": 10, "crit": 0.05, "critDmg": 1.5, "hit": 0, "dodge": 0.04 },
+    "growth": { "hp": 0.08, "atk": 0.08, "def": 0.08, "spd": 0.08 },
+    "signatureSkillId": "snake_venom_fang",
+    "passiveId": "passive_snake_instinct",
+    "counters": ["fish"],
+    "habitatTags": ["earth", "grass"],
+    "rarity": "rare",
+    "breedable": true,
+    "spriteId": "snake"
+  }
+]

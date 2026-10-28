@@ -1,0 +1,146 @@
+[
+  {
+    "id": "normal_strike",
+    "name": "普通攻击",
+    "kind": "normal",
+    "cost": 0,
+    "target": "single",
+    "power": 1.0,
+    "effects": []
+  },
+  {
+    "id": "water_wave",
+    "name": "水波",
+    "kind": "active",
+    "cost": 45,
+    "target": "single",
+    "power": 0.95,
+    "effects": [{ "kind": "slow", "value": 0.15, "duration": 2, "chance": 0.35, "stat": "spd" }]
+  },
+  {
+    "id": "water_torrent",
+    "name": "激流",
+    "kind": "active",
+    "cost": 75,
+    "target": "all",
+    "power": 1.7,
+    "effects": [{ "kind": "debuff", "value": 0.1, "duration": 2, "chance": 0.4, "stat": "def" }]
+  },
+  {
+    "id": "fire_ember",
+    "name": "火星",
+    "kind": "active",
+    "cost": 45,
+    "target": "single",
+    "power": 1.0,
+    "effects": [{ "kind": "dot", "value": 4, "duration": 2, "chance": 0.35 }]
+  },
+  {
+    "id": "fire_blaze",
+    "name": "烈焰",
+    "kind": "active",
+    "cost": 78,
+    "target": "all",
+    "power": 1.75,
+    "effects": [{ "kind": "dot", "value": 5, "duration": 2, "chance": 0.4 }]
+  },
+  {
+    "id": "grass_vine",
+    "name": "藤鞭",
+    "kind": "active",
+    "cost": 45,
+    "target": "single",
+    "power": 1.0,
+    "effects": [{ "kind": "stun", "value": 0, "duration": 1, "chance": 0.15 }]
+  },
+  {
+    "id": "grass_bloom",
+    "name": "绽放",
+    "kind": "active",
+    "cost": 72,
+    "target": "allyAll",
+    "power": 0,
+    "effects": [{ "kind": "heal", "value": 20, "duration": 0, "chance": 1 }]
+  },
+  {
+    "id": "earth_rock",
+    "name": "岩击",
+    "kind": "active",
+    "cost": 48,
+    "target": "single",
+    "power": 1.05,
+    "effects": [{ "kind": "debuff", "value": 0.12, "duration": 2, "chance": 0.3, "stat": "spd" }]
+  },
+  {
+    "id": "earth_quake",
+    "name": "地震",
+    "kind": "active",
+    "cost": 76,
+    "target": "all",
+    "power": 1.7,
+    "effects": [{ "kind": "stun", "value": 0, "duration": 1, "chance": 0.15 }]
+  },
+  {
+    "id": "thunder_spark",
+    "name": "电光",
+    "kind": "active",
+    "cost": 42,
+    "target": "single",
+    "power": 0.95,
+    "effects": [{ "kind": "silence", "value": 0, "duration": 1, "chance": 0.2 }]
+  },
+  {
+    "id": "thunder_storm",
+    "name": "雷暴",
+    "kind": "active",
+    "cost": 80,
+    "target": "all",
+    "power": 1.8,
+    "effects": [{ "kind": "slow", "value": 0.2, "duration": 2, "chance": 0.3, "stat": "spd" }]
+  },
+  {
+    "id": "turtle_shell_bash",
+    "name": "龟甲冲撞",
+    "kind": "active",
+    "cost": 50,
+    "target": "single",
+    "power": 1.2,
+    "effects": []
+  },
+  {
+    "id": "fish_tide",
+    "name": "潮汐",
+    "kind": "active",
+    "cost": 55,
+    "target": "all",
+    "power": 1.1,
+    "effects": [{ "kind": "cleanse", "value": 0, "duration": 0, "chance": 1, "target": "allAllies" }]
+  },
+  {
+    "id": "frog_croak",
+    "name": "蛙鸣",
+    "kind": "active",
+    "cost": 60,
+    "target": "single",
+    "power": 0,
+    "effects": [{ "kind": "stun", "value": 0, "duration": 1, "chance": 0.45 }]
+  },
+  {
+    "id": "cat_pounce",
+    "name": "猫扑",
+    "kind": "active",
+    "cost": 45,
+    "target": "single",
+    "power": 1.35,
+    "effects": []
+  },
+  {
+    "id": "snake_venom_fang",
+    "name": "毒牙",
+    "kind": "active",
+    "cost": 50,
+    "target": "single",
+    "power": 1.1,
+    "effects": [{ "kind": "dot", "value": 6, "duration": 3, "chance": 0.8 }]
+  }
+]

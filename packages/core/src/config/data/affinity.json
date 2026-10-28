@@ -1,0 +1,7 @@
+{
+  "water": { "turtle": 1, "frog": 1 },
+  "fire": { "fish": -1, "cat": 1 },
+  "grass": { "frog": 1, "snake": 1 },
+  "earth": { "snake": 1, "turtle": 1 },
+  "thunder": { "fish": 1, "cat": -1 }
+}

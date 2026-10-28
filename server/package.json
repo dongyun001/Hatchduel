@@ -1,0 +1,19 @@
+{
+  "name": "@petbattle/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PetBattle API 服务（M0：Hello + /health；业务由 C 会话实现）。",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p ../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@petbattle/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15"
+  }
+}

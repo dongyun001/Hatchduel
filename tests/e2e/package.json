@@ -1,0 +1,10 @@
+{
+  "name": "@petbattle/e2e-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "端到端测试（第 2 波 / QA）。M0 只有占位。",
+  "scripts": {
+    "test": "echo \"e2e: 占位，QA 会话接入\""
+  }
+}
