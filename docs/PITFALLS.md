@@ -400,6 +400,54 @@
 
 ---
 
+## 2.2 2026-10-28 M0 契约冻结补记
+
+### P-038 配置表里放函数，JSON 存不下
+
+- **日期**：2026-10-28
+- **发现者/会话**：0 Lead
+- **范围**：core / content
+- **现象**：DOMAIN_MODEL §2.7 `HabitatConfig.upgrade.cost/capacity/productionMul` 写成函数，但配置源是 JSON，序列化后函数丢失，校验器也读不到。
+- **原因**：先写类型后定存储格式，把“计算规则”当成了“配置数据”。
+- **规避**：`upgrade` 改为等级表 `{ maxLevel, levels: [{ level, cost, capacity, productionMul }] }`；等级从 1 连续；校验器检查长度与序号。见 `docs/CONTRACT.md` C-01。
+- **验证**：`pnpm validate:config`；构造 maxLevel 不匹配用例会报 `invalid_value`。
+- **关联**：`DOMAIN_MODEL.md` §2.7、`docs/CONTRACT.md` §7、`packages/core/src/config/schema.ts`。
+
+### P-039 领域类型在 protocol 里复制一份
+
+- **日期**：2026-10-28
+- **发现者/会话**：0 Lead
+- **范围**：protocol / core / server / client
+- **现象**：协议需要 `Profile`、`PetInstance`、`BattleSetup`、`ProfilePatch` 等 DTO，最省事的做法是复制一遍；字段名/可空性随后漂移，联调才发现。
+- **原因**：把“传输契约”和“领域契约”当成两套模型。
+- **规避**：领域类型唯一定义在 `@petbattle/core`；`@petbattle/protocol` 只 `import type` / `re-export`；依赖方向固定为 protocol → core，core 不 import protocol；ESLint 禁止 core 引用其他 workspace 包。
+- **验证**：protocol 测试校验 `ApiContract` 与 `ROUTES` 对齐；任何复制会在 typecheck 阶段出现重复定义或字段不一致。
+- **关联**：`docs/CONTRACT.md` C-06/§3、PITFALLS P-030。
+
+### P-040 NodeNext 下相对导入漏写 `.js`
+
+- **日期**：2026-10-28
+- **发现者/会话**：0 Lead
+- **范围**：core / protocol / server / tools
+- **现象**：`tsconfig` 用 `module: NodeNext`，写成 `import './types/pet'` 时 tsc 或运行时解析失败；写成 `.ts` 又会和构建产物冲突。
+- **原因**：Node ESM 要求显式扩展名，TypeScript 的 NodeNext 按产物 `.js` 解析。
+- **规避**：源码里的相对导入统一写 `.js`（`./types/pet.js`），由 tsx/Vitest/esbuild 映射到 `.ts`；不要写 `.ts` 扩展名。
+- **验证**：`pnpm typecheck` + `npx tsx server/src/main.ts` 能直接跑通。
+- **关联**：`tsconfig.base.json`、`docs/CONTRACT.md` §2。
+
+### P-041 workspace 包的 exports 指向 TS 源码
+
+- **日期**：2026-10-28
+- **发现者/会话**：0 Lead
+- **范围**：core / protocol / server / tools
+- **现象**：M0 为了零构建，`@petbattle/core`、`@petbattle/protocol` 的 `exports` 直接指向 `src/index.ts`；这在 tsx/Vitest 下可用，但生产 Node 不能直接加载 TS。
+- **原因**：契约会话不引入构建链，先用 TS 源码联调。
+- **规避**：M1 由 A 用 esbuild（target es2020）产出 `dist/`，把 `exports` 改为 `import: ./dist/index.js` + `types: ./dist/index.d.ts`；在此之前不要用 `node file.js` 直接跑依赖这些包的代码。
+- **验证**：M1 增加“干净构建 + node 启动”CI 步骤。
+- **关联**：`TECH_DESIGN.md` §16、`docs/CONTRACT.md` §2.2、未决项 5。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -479,3 +527,4 @@
 |---|---|---|
 | v1.0 | 2026-10-27 | 初版：设计阶段已修正坑 + 实施高风险 + 领域检查清单 |
 | v1.1 | 2026-10-28 | 追加 P-031~P-037（评审补记）；红线补 MVP 物种 5 种 |
+| v1.2 | 2026-10-28 | 追加 P-038~P-041（M0 契约冻结补记：配置序列化、类型单一来源、NodeNext 扩展名、exports 指向源码） |
