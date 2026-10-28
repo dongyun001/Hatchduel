@@ -1,6 +1,6 @@
 # client/ —— Cocos Creator 工程（由 B 会话创建）
 
-本目录当前只有 `assets/art/` 的像素样张（E 会话产出，见 `docs/ART_SPEC.md`），**还不是一个可打开的 Cocos 工程**。
+本目录目前**还不是一个可打开的 Cocos 工程**。之前的像素废稿已按项目决定移除（需要时从 git 历史 `contract-v1` 之前的提交取回，或按 `docs/ART_SPEC.md` 重新产出）。
 
 ## 为什么没有工程文件
 
@@ -23,13 +23,7 @@ M0 契约会话（0 号）所在机器没有安装 Cocos Creator，无法生成�
 - 同一时间只允许一个会话打开 Cocos Creator；`temp/`、`library/`、`build/`、`profiles/`、`native/` 已在 `.gitignore`。
 - 中文正文用系统字体在原生分辨率渲染，不做低分辨率中文像素字（ART_SPEC §1）。
 
-## 现有资源
+## 美术资源
 
-```
-client/assets/art/pets/turtle/water/
-  pet_turtle_water_idle.png / .json / _00.._03.png
-  preview_turtle_water_juvenile.png
-client/assets/art/.src/gen_turtle.py
-```
-
-命名规范见 `docs/ART_SPEC.md` §6。
+M0 的像素草稿已全部废弃并移除。后续按 `docs/ART_SPEC.md` 重新产出，命名规范见该文档 §6。
+美术不属于本轮并行开发范围，B 用同尺寸占位图跑通布局即可（ART_SPEC §8.3）。
