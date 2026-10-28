@@ -1,0 +1,19 @@
+{
+  "name": "@petbattle/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "批量模拟与平衡报告（M0 占位，D 会话实现）。",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@petbattle/core": "workspace:*"
+  }
+}

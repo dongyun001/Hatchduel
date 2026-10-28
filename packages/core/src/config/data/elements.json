@@ -1,0 +1,37 @@
+[
+  {
+    "id": "water",
+    "name": "水",
+    "skillPool": ["water_wave", "water_torrent"],
+    "color": "#4a90d9",
+    "habitatTag": "water"
+  },
+  {
+    "id": "fire",
+    "name": "火",
+    "skillPool": ["fire_ember", "fire_blaze"],
+    "color": "#d9544a",
+    "habitatTag": "fire"
+  },
+  {
+    "id": "grass",
+    "name": "草",
+    "skillPool": ["grass_vine", "grass_bloom"],
+    "color": "#4ad96a",
+    "habitatTag": "grass"
+  },
+  {
+    "id": "earth",
+    "name": "土",
+    "skillPool": ["earth_rock", "earth_quake"],
+    "color": "#a97c50",
+    "habitatTag": "earth"
+  },
+  {
+    "id": "thunder",
+    "name": "雷",
+    "skillPool": ["thunder_spark", "thunder_storm"],
+    "color": "#d9c84a",
+    "habitatTag": "thunder"
+  }
+]
