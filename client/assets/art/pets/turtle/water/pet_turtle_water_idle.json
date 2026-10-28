@@ -1,0 +1,61 @@
+{
+  "image": "pet_turtle_water_idle.png",
+  "species": "turtle",
+  "element": "water",
+  "stage": "juvenile",
+  "action": "idle",
+  "pose": "side, lying flat (sea-turtle profile)",
+  "frameSize": [
+    64,
+    64
+  ],
+  "pivot": [
+    0.5,
+    0.96875
+  ],
+  "groundLineY": 62,
+  "fps": 8,
+  "loop": true,
+  "frames": [
+    {
+      "index": 0,
+      "rect": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "duration": 125
+    },
+    {
+      "index": 1,
+      "rect": [
+        64,
+        0,
+        64,
+        64
+      ],
+      "duration": 125
+    },
+    {
+      "index": 2,
+      "rect": [
+        128,
+        0,
+        64,
+        64
+      ],
+      "duration": 125
+    },
+    {
+      "index": 3,
+      "rect": [
+        192,
+        0,
+        64,
+        64
+      ],
+      "duration": 125
+    }
+  ]
+}

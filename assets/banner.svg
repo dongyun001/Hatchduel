@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-label="PetBattle">
+  <rect width="1200" height="360" fill="#0e1626"/>
+  <g opacity="0.16" stroke="#2a3d5c" stroke-width="1">
+    <path d="M0 24H1200M0 48H1200M0 72H1200M0 96H1200M0 120H1200M0 144H1200M0 168H1200M0 192H1200M0 216H1200M0 240H1200M0 264H1200M0 288H1200M0 312H1200M0 336H1200"/>
+    <path d="M24 0V360M48 0V360M72 0V360M96 0V360M120 0V360M144 0V360M168 0V360M192 0V360M216 0V360M240 0V360M264 0V360M288 0V360M312 0V360M336 0V360M360 0V360M384 0V360M408 0V360M432 0V360M456 0V360M480 0V360M504 0V360M528 0V360M552 0V360M576 0V360M600 0V360M624 0V360M648 0V360M672 0V360M696 0V360M720 0V360M744 0V360M768 0V360M792 0V360M816 0V360M840 0V360M864 0V360M888 0V360M912 0V360M936 0V360M960 0V360M984 0V360M1008 0V360M1032 0V360M1056 0V360M1080 0V360M1104 0V360M1128 0V360M1152 0V360M1176 0V360"/>
+  </g>
+  <rect x="2" y="2" width="1196" height="356" fill="none" stroke="#2a3d5c" stroke-width="4"/>
+
+  <!-- turtle -->
+  <g transform="translate(96,104)" shape-rendering="crispEdges">
+    <rect x="40" y="40" width="120" height="80" fill="#2f8f5b"/>
+    <rect x="56" y="24" width="88" height="24" fill="#3fbf7f"/>
+    <rect x="24" y="56" width="24" height="40" fill="#3fbf7f"/>
+    <rect x="152" y="56" width="24" height="40" fill="#3fbf7f"/>
+    <rect x="168" y="64" width="24" height="16" fill="#7ee6a8"/>
+    <rect x="184" y="60" width="8" height="8" fill="#0e1626"/>
+    <rect x="56" y="120" width="24" height="16" fill="#2f8f5b"/>
+    <rect x="120" y="120" width="24" height="16" fill="#2f8f5b"/>
+    <rect x="64" y="48" width="12" height="12" fill="#7ee6a8"/>
+    <rect x="88" y="64" width="16" height="16" fill="#1f6b43"/>
+    <rect x="112" y="56" width="16" height="16" fill="#1f6b43"/>
+    <rect x="120" y="80" width="16" height="16" fill="#1f6b43"/>
+  </g>
+
+  <!-- fish -->
+  <g transform="translate(956,116)" shape-rendering="crispEdges">
+    <rect x="24" y="32" width="112" height="56" fill="#4aa8ff"/>
+    <rect x="0" y="16" width="32" height="88" fill="#2f7fd8"/>
+    <rect x="128" y="40" width="20" height="16" fill="#ffb84a"/>
+    <rect x="136" y="32" width="12" height="12" fill="#0e1626"/>
+    <rect x="40" y="44" width="12" height="12" fill="#8fd0ff"/>
+    <rect x="48" y="72" width="56" height="8" fill="#2f7fd8"/>
+    <rect x="72" y="24" width="16" height="8" fill="#8fd0ff"/>
+  </g>
+
+  <!-- pixel sparks -->
+  <g fill="#8ee6c8" shape-rendering="crispEdges">
+    <rect x="330" y="58" width="8" height="8"/>
+    <rect x="346" y="42" width="8" height="8" opacity="0.6"/>
+    <rect x="838" y="72" width="8" height="8"/>
+    <rect x="854" y="56" width="8" height="8" opacity="0.6"/>
+    <rect x="580" y="304" width="8" height="8" opacity="0.5"/>
+  </g>
+
+  <text x="600" y="156" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="86" font-weight="700" fill="#f4f7ff" letter-spacing="6">PETBATTLE</text>
+  <text x="600" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" fill="#8ee6c8" letter-spacing="8">RAISE · BREED · BATTLE</text>
+  <text x="600" y="246" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#8ea0bf" letter-spacing="5">PIXEL PET SIMULATION</text>
+  <rect x="510" y="268" width="180" height="4" fill="#8ee6c8"/>
+</svg>
