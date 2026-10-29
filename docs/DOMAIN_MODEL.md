@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 项目代号 | PetBattle |
-| 文档版本 | v1.3 |
+| 文档版本 | v1.4 |
 | 日期 | 2026-10-28 |
 | 对应需求 | PRD v1.1 |
 | 状态 | 待评审 |
@@ -18,6 +18,7 @@
 | v1.1 | 2026-10-28 | 新增被动表、经验曲线、回合结算顺序、敌方快照；修复突变计数、产出系数、状态边界、不变量 |
 | v1.2 | 2026-10-29 | 追加 §15 实现说明（A 会话，contract-v1）：派生属性取整口径、推进顺序落地、繁殖冷却、战斗状态与契约缺口 |
 | v1.3 | 2026-10-29 | contract-v1.2 D-01~D-07：releasePet 带 cfg、BreedResult.parentCooldowns、autoCommand、applyExp、栖息地两个可选字段、暴击倍率口径 |
+| v1.4 | 2026-10-29 | contract-v1.3 D-08~D-14：测试与生产数据解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 careRecoveryPerAction、hit 加法语义、inheritance.weight 标 reserved |
 
 ---
 
@@ -166,7 +167,7 @@ interface TraitConfig {
   statMods?: Partial<Record<StatKey, number>>; // 乘数，如 { atk: 1.05 }
   productionMod?: number;                       // 产出乘数，默认 1
   battleTags?: string[];                        // 供 AI/技能判定
-  inheritance: { weight: number };              // 遗传权重，0~1
+  inheritance: { weight: number };              // reserved：MVP 不消费，等显隐性模型定案（D-14）
 }
 ```
 
@@ -205,6 +206,8 @@ interface HabitatConfig {
   hungerPenaltyWhenNoFoodPerHour?: number;
   /** 产出阶段系数；缺省 0.5 / 1 / 0.8（contract-v1.2 D-06）。 */
   productionStageMul?: { juvenile: number; adult: number; elder: number };
+  /** 照料恢复量：clean 恢复 hygiene、play 恢复 mood；缺省 20 / 20（contract-v1.3 D-12）。 */
+  careRecoveryPerAction?: { clean?: number; play?: number };
   offlineCapMs: number;         // 默认 8h
   decayCapMs: number;           // 默认 24h
   // 数据化（CONTRACT C-01）：JSON 不能存函数，等级表代替函数。
@@ -387,7 +390,9 @@ interface PetInstance {
 )
 ```
 
-- `crit/critDmg/hit/dodge` 不参与等级、阶段、基因、相性；只乘 `condMul`、`traitMul`、`passiveMul`。
+- `crit/critDmg/dodge` 不参与等级、阶段、基因、相性；只乘 `condMul`、`traitMul`、`passiveMul`。
+- **`hit` 的 `statMods` 是加法增量**（contract-v1.3 D-13）：`(base.hit + Σ hitMods) × condMul`，再 clamp ±0.5；
+  基础 hit 为 0 时乘数没有意义，所以特质/被动一律按“+0.02 = +2 个百分点”叠加。
 - **暴击倍率口径（contract-v1.2 D-04）**：150%（`CRIT_DAMAGE_DEFAULT`）是**基础倍率**；`condMul`、特质、被动会修正它，
   满状态的实际暴击倍率可以高于 150%（如 `1.5 × 1.1 = 1.65`）。不要把 150% 当成结算后的固定值。
 - 取整只在最后一步；中间保留 double。比例属性（`crit/critDmg/hit/dodge`）实现时保留 4 位小数后 clamp（见 §15.1）。
@@ -719,6 +724,7 @@ function releasePet(
   if (pet.stage === 'egg') throw new ReleaseError('cannot_release_egg');
   if (pet.locked) throw new ReleaseError('pet_locked');
   if (profile.lineup.includes(petId)) throw new ReleaseError('in_lineup');
+  if (profile.pvp.defense.includes(petId)) throw new ReleaseError('in_defense');
   if (pet.habitatId) throw new ReleaseError('in_habitat');
   if ((pet.stage === 'adult' || pet.stage === 'elder') && countAdults(profile) <= 1) {
     throw new ReleaseError('last_adult');
@@ -743,7 +749,7 @@ function releaseValue(pet: PetInstance): number {
 }
 ```
 
-- 放生前必须移出编队和栖息地；锁定宠物不可放生。
+- 放生前必须移出编队、PvP 防守阵容和栖息地；锁定宠物不可放生（`in_defense` 为 contract-v1.3 D-11）。
 - 至少保留 1 只成年宠物，避免软锁；`countAdults` 统计成年 + 老年。老年可放，但不能放走最后一只可战斗/可繁殖的宠物。
 - 蛋不可放生，避免“刷蛋/退成本”。
 - 放生返还以基因尘为主，数值配置化；服务器写审计日志。
@@ -773,6 +779,8 @@ interface BattleSetup {
 ```
 
 - `buildBattleSetup` 不读全局状态，只接收个体快照和配置。
+- `buildPveBattleSetup(party, stage, cfg, seed)`（contract-v1.3 D-10）：`team0` = 玩家队伍（uid `a*`）、
+  `team1` = `buildEnemyTeam(stage, cfg, seed)`（uid `b*`）；同一输入必然同一输出。
 - 状态差的宠物属性会被降低；这是圈养与战斗的连接点。
 - PvP 防守快照保存 `BattleSetup` 或可重建的个体快照；建议保存 `BattleUnitInit[]`，避免后续配置变更影响历史战报。
 
@@ -981,15 +989,17 @@ interface Profile {
 
 ---
 
-## 15. 实现说明（contract-v1.2，A 会话）
+## 15. 实现说明（contract-v1.3，A 会话）
 
 > 本节只记录 `packages/core` 的实现口径，不改变 §1~§13 的产品规则。
 
 ### 15.1 派生属性（§4.1）
 
 - `hp/atk/def/spd`：`floor(base × levelMul × stageMul × geneMul × condMul × traitMul × passiveMul × affinityMul)`。
-- `crit/critDmg/hit/dodge`：只乘 `condMul/traitMul/passiveMul`，**保留 4 位小数**后 clamp（`crit 0~1`、`dodge 0~0.9`、`hit ±0.5`）。
+- `crit/critDmg/dodge`：只乘 `condMul/traitMul/passiveMul`，**保留 4 位小数**后 clamp（`crit 0~1`、`dodge 0~0.9`）。
   若对这些比例值也 `floor`，`0.05 × 1.06 = 0` 会把暴击率直接抹平；DOMAIN §1「倍率保留 4 位小数」按此执行。
+- `hit`（D-13）：`(base.hit + Σ traitMods.hit + Σ passiveMods.hit) × condMul`，保留 4 位小数后 clamp ±0.5；
+  `statMods.hit = 0.02` 表示 +2 个百分点，不再是乘数。schema 仍要求 `statMods` 数值 > 0。
 - 蛋阶段 8 项全部返回 0（不参与战斗与产出）。
 - 暴击倍率：`150%` 是基础值，`condMul`/特质/被动会修正它（contract-v1.2 D-04 已裁定，见 §4.1）。
 
@@ -1029,6 +1039,8 @@ interface Profile {
   `availableCommands(uid)` 只在轮到该单位时非空，按「技能顺序 × 合法目标」展开，最后附 `surrender`。
 - `BattleEngine.autoCommand(uid)`（contract-v1.2 D-03）：内置确定性 AI 的公开入口，与引擎内部选择逻辑是**同一份实现**；
   未轮到该单位或战斗已结束时抛错。
+- AI 留能量策略（contract-v1.3 D-09）：队友血量 <50% 且能治疗 → 治疗；否则有大招且精力够 → 大招；
+  精力 ≥ 最便宜大招 cost − 20 → 普攻攒能量（不再乱放小技能）；否则精力够小技能 → 小技能；否则普攻。
 - 精力：创建时 0，第 1 回合开始即 +20；普攻命中 +10；技能在伤害结算后扣 cost（与 §9.3 顺序一致）。
 - 伤害：命中 = `clamp(0.90 + hit − dodge, 0.05, 1)`；暴击 `rng() < crit`，倍率取 `stats.critDmg`；
   克制由 `ConfigRepo.counterMultiplier` 给 1.25/0.85/1；浮动 `0.95 + rng()×0.10`；最后 `floor`。
@@ -1044,3 +1056,27 @@ interface Profile {
 |---|---|---|
 | 技能 `cooldown`（回合）未实现 | 配置里有该字段但 MVP 数据未用 | MVP 明确忽略；后续加独立冷却表 |
 | 食物不足惩罚只按“有无缺口”判定 | D-05 字段名是 `WhenNoFoodPerHour`，未按缺口大小缩放 | 若要做“欠多少扣多少”，需要新系数，再改一行 |
+
+### 15.7 栖息地操作（D-12）
+
+六个函数都返回 `{ profile, patch }`：不改入参；`patch.fromRevision = patch.toRevision = profile.revision`
+（revision 由服务端写操作统一 +1）；`patch.at = now`；`patch.lastEvaluatedAt` = 存档当前值（时间推进仍由 `advanceProfile` 负责）。
+`now < profile.lastEvaluatedAt` 抛 `TimeError('time_backwards')`。
+
+| 函数 | 行为 | 失败 code |
+|---|---|---|
+| `movePetToHabitat(profile, petId, habitatId \| null, now, cfg)` | 放入/移出；先从所有槽位清除该宠物（保证唯一占位），再找空位；同一栖息地重复放入幂等 | `pet_not_found` / `egg_not_allowed` / `habitat_not_found` / `capacity_full` / `slot_conflict` |
+| `feedPet(profile, petId, foodId, now, cfg)` | 扣 `FoodConfig.cost`，`hunger += nutrition`、`mood += mood`，clamp 100 | `pet_not_found` / `egg_not_allowed` / `food_not_found` / `insufficient_resources` |
+| `cleanPet(profile, petId, now, cfg)` | `hygiene += careRecovery.clean`（缺省 20），不消耗资源 | `pet_not_found` / `egg_not_allowed` |
+| `playWithPet(profile, petId, now, cfg)` | `mood += careRecovery.play`（缺省 20），不消耗资源 | `pet_not_found` / `egg_not_allowed` |
+| `upgradeHabitat(profile, habitatId, now, cfg)` | 扣下一级 `cost`，`level + 1`，slots 补齐到新容量 | `habitat_not_found` / `max_level` / `insufficient_resources` / `slot_conflict` |
+| `collectHabitat(profile, habitatId, now, cfg)` | `stored` 转入 `currencies`；货币按整数入账，小数零头保留在 `stored` | `habitat_not_found` |
+
+- 失败抛 `Error`：`name = 'HabitatError'`，`code` 为上表字符串；服务端按 code 映射协议错误码。
+- `careRecovery` 取宠物所在栖息地的 `HabitatConfig.careRecoveryPerAction`；不在栖息地时用缺省 20 / 20。
+
+### 15.8 PvE 入口（D-10）
+
+- `buildPveBattleSetup(party, stage, cfg, seed)`：`team0` 复用 `buildBattleSetup`（uid `a*`，最多 3 只），
+  `team1` 复用 `buildEnemyTeam`（uid `b*`）；只做组合，不新增数值规则。
+

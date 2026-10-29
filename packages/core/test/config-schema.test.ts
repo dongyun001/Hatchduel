@@ -202,3 +202,28 @@ describe('validateConfig：contract-v1.2 栖息地可选字段（D-05/D-06）', 
     expect(codes(validateConfig(config))).toContain('out_of_range');
   });
 });
+
+describe('validateConfig：careRecoveryPerAction（contract-v1.3 D-12）', () => {
+  it('clean/play 可选且非负时通过（允许只填一个）', () => {
+    const full = cloneFixture();
+    asRecord(asRecordArray(full['habitats'])[0]!)['careRecoveryPerAction'] = {
+      clean: 15,
+      play: 10,
+    };
+    expect(validateConfig(full).issues).toEqual([]);
+
+    const partial = cloneFixture();
+    asRecord(asRecordArray(partial['habitats'])[0]!)['careRecoveryPerAction'] = { clean: 5 };
+    expect(validateConfig(partial).issues).toEqual([]);
+  });
+
+  it('负数报 out_of_range，非对象报 invalid_type', () => {
+    const negative = cloneFixture();
+    asRecord(asRecordArray(negative['habitats'])[0]!)['careRecoveryPerAction'] = { play: -1 };
+    expect(codes(validateConfig(negative))).toContain('out_of_range');
+
+    const notObject = cloneFixture();
+    asRecord(asRecordArray(notObject['habitats'])[0]!)['careRecoveryPerAction'] = 5;
+    expect(codes(validateConfig(notObject))).toContain('invalid_type');
+  });
+});

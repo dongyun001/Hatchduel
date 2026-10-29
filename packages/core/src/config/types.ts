@@ -149,6 +149,14 @@ export interface HabitatConfig {
   /** 食物（upkeep）不足时，每只宠物每小时额外扣的饥饿；缺省 0（contract-v1.2 D-05）。 */
   hungerPenaltyWhenNoFoodPerHour?: number;
   /**
+   * 照料动作的恢复量（contract-v1.3 D-12）：`clean` 恢复 hygiene、`play` 恢复 mood。
+   * 缺省 20 / 20；清洁与陪玩不消耗资源。
+   */
+  careRecoveryPerAction?: {
+    clean?: number;
+    play?: number;
+  };
+  /**
    * 产出阶段系数；缺省 0.5 / 1 / 0.8（DOMAIN §6.1，contract-v1.2 D-06）。
    * 只影响栖息地产出，不影响战斗属性。
    */

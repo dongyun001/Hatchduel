@@ -8,7 +8,8 @@ import {
   type HabitatInstance,
 } from '@petbattle/core';
 
-import { HOUR, MINUTE, T0, habitatRow, makePet, makeProfile, makeRepo } from './factory.js';
+import { HOUR, MINUTE, T0, habitatRow, makePet, makeProfile } from './factory.js';
+import { makeSyntheticRepo } from './synthetic.js';
 
 function habitatAt(overrides: Partial<HabitatInstance> = {}): HabitatInstance {
   return {
@@ -23,7 +24,7 @@ function habitatAt(overrides: Partial<HabitatInstance> = {}): HabitatInstance {
 }
 
 describe('advancePet：阶段推进（DOMAIN §5.1）', () => {
-  const cfg = makeRepo();
+  const cfg = makeSyntheticRepo();
   const breeding = cfg.breeding();
 
   it('蛋 → 幼年 → 成年 → 老年，stageChangedAt 落在阈值时刻', () => {
@@ -79,7 +80,7 @@ describe('advancePet：阶段推进（DOMAIN §5.1）', () => {
 });
 
 describe('advanceHabitat：产出与消耗（DOMAIN §6.1/§6.2）', () => {
-  const cfg = makeRepo();
+  const cfg = makeSyntheticRepo();
 
   it('1 只成年水鱼 1 小时：产出 13 金币 / 6 食物 / 1 基因尘，食物扣 1 维护', () => {
     const pet = makePet({ habitatId: 'meadow' });
@@ -168,7 +169,7 @@ describe('advanceHabitat：产出与消耗（DOMAIN §6.1/§6.2）', () => {
 });
 
 describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () => {
-  const highProduction = makeRepo((config) => {
+  const highProduction = makeSyntheticRepo((config) => {
     (habitatRow(config, 'meadow')['productionPerHour'] as Array<Record<string, unknown>>)[0]![
       'amountPerHour'
     ] = 1000;
@@ -184,7 +185,7 @@ describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () =
 
   it('1 小时后饥饿 -3 / 心情 -2 / 清洁 -2，健康回满', () => {
     const pet = makePet({ habitatId: 'meadow', condition: { health: 90 } });
-    const result = advanceProfile(makeProfile([pet], [pet.id]), T0 + HOUR, makeRepo());
+    const result = advanceProfile(makeProfile([pet], [pet.id]), T0 + HOUR, makeSyntheticRepo());
     const updated = result.profile.pets[pet.id]!;
     expect(updated.condition.hunger).toBe(97);
     expect(updated.condition.mood).toBe(98);
@@ -194,7 +195,7 @@ describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () =
 
   it('状态衰减封顶 24 小时（P-025）', () => {
     const pet = makePet({ habitatId: 'meadow' });
-    const result = advanceProfile(makeProfile([pet], [pet.id]), T0 + 100 * HOUR, makeRepo());
+    const result = advanceProfile(makeProfile([pet], [pet.id]), T0 + 100 * HOUR, makeSyntheticRepo());
     const updated = result.profile.pets[pet.id]!;
     expect(updated.condition.hunger).toBe(28);
     expect(updated.condition.mood).toBe(52);
@@ -203,7 +204,7 @@ describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () =
 
   it('饥饿见底时扣健康，健康地板 1', () => {
     const starving = makePet({ id: 's', habitatId: 'meadow', condition: { hunger: 2 } });
-    const first = advanceProfile(makeProfile([starving], ['s']), T0 + HOUR, makeRepo());
+    const first = advanceProfile(makeProfile([starving], ['s']), T0 + HOUR, makeSyntheticRepo());
     expect(first.profile.pets['s']!.condition.hunger).toBe(0);
     expect(first.profile.pets['s']!.condition.health).toBe(98);
 
@@ -212,21 +213,21 @@ describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () =
       habitatId: 'meadow',
       condition: { hunger: 0, hygiene: 0, health: 2 },
     });
-    const second = advanceProfile(makeProfile([dying], ['d']), T0 + HOUR, makeRepo());
+    const second = advanceProfile(makeProfile([dying], ['d']), T0 + HOUR, makeSyntheticRepo());
     expect(second.profile.pets['d']!.condition.health).toBe(1);
   });
 
   it('不在栖息地的宠物不衰减', () => {
     const pet = makePet({ habitatId: null });
-    const result = advanceProfile(makeProfile([pet], []), T0 + HOUR, makeRepo());
+    const result = advanceProfile(makeProfile([pet], []), T0 + HOUR, makeSyntheticRepo());
     expect(result.profile.pets[pet.id]!.condition.hunger).toBe(100);
   });
 
   it('同一 now 幂等：第二次无变化、revision 不变', () => {
     const pet = makePet({ habitatId: 'meadow' });
     const profile = makeProfile([pet], [pet.id]);
-    const first = advanceProfile(profile, T0 + HOUR, makeRepo());
-    const second = advanceProfile(first.profile, T0 + HOUR, makeRepo());
+    const first = advanceProfile(profile, T0 + HOUR, makeSyntheticRepo());
+    const second = advanceProfile(first.profile, T0 + HOUR, makeSyntheticRepo());
 
     expect(second.profile.revision).toBe(first.profile.revision);
     expect(JSON.stringify(second.profile)).toBe(JSON.stringify(first.profile));
@@ -240,21 +241,40 @@ describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () =
 
   it('now 倒退抛 TimeError', () => {
     const profile = makeProfile([], []);
-    expect(() => advanceProfile(profile, T0 - 1, makeRepo())).toThrow(TimeError);
+    expect(() => advanceProfile(profile, T0 - 1, makeSyntheticRepo())).toThrow(TimeError);
   });
 
   it('不改写入参 profile', () => {
     const pet = makePet({ habitatId: 'meadow' });
     const profile = makeProfile([pet], [pet.id]);
     const before = JSON.stringify(profile);
-    advanceProfile(profile, T0 + HOUR, makeRepo());
+    advanceProfile(profile, T0 + HOUR, makeSyntheticRepo());
     expect(JSON.stringify(profile)).toBe(before);
   });
 });
 
 describe('advanceHabitat：contract-v1.2 D-05/D-06 配置字段', () => {
-  const withStageMul = makeRepo((config) => {
+  const withStageMul = makeSyntheticRepo((config) => {
     habitatRow(config, 'meadow')['productionStageMul'] = { juvenile: 0.6, adult: 1.2, elder: 0.3 };
+  });
+
+  it('未配置 productionStageMul 时用默认 0.5 / 1 / 0.8（显式删除字段）', () => {
+    const defaults = makeSyntheticRepo((config) => {
+      delete habitatRow(config, 'meadow')['productionStageMul'];
+    });
+    const adult = makePet({ id: 'a', habitatId: 'meadow' });
+    const juvenile = makePet({ id: 'j', stage: 'juvenile', habitatId: 'meadow' });
+    const elder = makePet({ id: 'e', stage: 'elder', habitatId: 'meadow' });
+
+    expect(
+      advanceHabitat(habitatAt({ slots: ['a'] }), [adult], T0 + HOUR, defaults).produced.coin,
+    ).toBe(Math.floor(12 * 1.15 * 1));
+    expect(
+      advanceHabitat(habitatAt({ slots: ['j'] }), [juvenile], T0 + HOUR, defaults).produced.coin,
+    ).toBe(Math.floor(12 * 1.15 * 0.5));
+    expect(
+      advanceHabitat(habitatAt({ slots: ['e'] }), [elder], T0 + HOUR, defaults).produced.coin,
+    ).toBe(Math.floor(12 * 1.15 * 0.8));
   });
 
   it('配置 productionStageMul 后按配置结算', () => {
@@ -275,13 +295,12 @@ describe('advanceHabitat：contract-v1.2 D-05/D-06 配置字段', () => {
   });
 
   const noFood = (penalty: number | null) =>
-    makeRepo((config) => {
-      habitatRow(config, 'meadow')['upkeepPerPetPerHour'] = [
-        { resource: 'food', amountPerHour: 100 },
-      ];
-      if (penalty !== null) {
-        habitatRow(config, 'meadow')['hungerPenaltyWhenNoFoodPerHour'] = penalty;
-      }
+    makeSyntheticRepo((config) => {
+      const habitat = habitatRow(config, 'meadow');
+      habitat['upkeepPerPetPerHour'] = [{ resource: 'food', amountPerHour: 100 }];
+      // D-08：显式删除可选字段，不依赖示例/合成配置“恰好没填”。
+      delete habitat['hungerPenaltyWhenNoFoodPerHour'];
+      if (penalty !== null) habitat['hungerPenaltyWhenNoFoodPerHour'] = penalty;
     });
 
   it('未配置 hungerPenaltyWhenNoFoodPerHour 时缺口不额外扣饥饿', () => {
