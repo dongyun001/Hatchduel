@@ -455,6 +455,20 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 批量模拟 | 5000 场：胜率 0.300、平局 0、平均 5.39 回合、大招间隔 3；7 天资源 金币 2904 / 食物 858 / 基因尘 210；1000 次繁殖突变率 0.029 |
 | 结论 | 框架与数据流已通；胜率偏低、回合偏短，属于 D 的初版调参范围（目标见 BALANCE §2） |
 
+### 11.4 B 客户端首批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 工程 | Cocos Creator 3.8.8，横屏 1920×1080（640×360 的 3×），Point/无 mipmap/无压缩 |
+| 场景 | Boot → Home → Habitat 闭环；Home 资源栏/宠物卡，Habitat 槽位/产出/收取/喂食 |
+| 平台 | wechat / web / steam 适配器；`wx.*` 只在 `platform/wechat.ts` |
+| 状态 | app/store 单向数据流；mock profile 用 core 类型构造（未复制） |
+| ApiClient | 按 ROUTES/ApiContract 泛型；带幂等/revision/协议头；409 用 latestProfile 重建 |
+| 同步 | `client/assets/lib` 由 `sync-lib.mjs` 生成，`--check` 已进 CI |
+| 构建 | web-mobile 与 wechatgame 均成功；debug 包 6.2MB，正式包需 release + 分包 |
+| 冒烟 | headless 浏览器 Boot→Home→Habitat，收取后金币/食物同步 |
+| 已知 | Habitat 动作仍是 mock（`DEV_CONFIG.useServer=false`）；mock profile 可改用 `createPet`；场景为手写，后续用编辑器保存 |
+
 ## 12. 变更记录
 
 | 版本 | 日期 | 说明 |

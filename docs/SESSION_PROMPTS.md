@@ -20,7 +20,7 @@
 | A | 第二批已完成；**第三批待做**（v1.3：测试解耦 + 栖息地函数 + PvE setup） | 按 §6；解 D/C 阻塞 |
 | D | 第二批已完成并合入（分关平衡/近亲修复/栖息地字段） | 等 A 测试解耦后调水/土系；用真实路径复跑 |
 | C | 第二批已完成并合入（初始档/宠物操作/编队） | **等 A 第三批**，然后按 §2 接栖息地端点与放生闭环 |
-| B | **Cocos Creator 3.8.8 已装**（`C:\ProgramData\cocos\editors\Creator.8.8`） | 按 §4 开工 |
+| B | **首批已完成并合入**（Boot/Home/Habitat、平台层、ApiClient） | 下一批 PetList/PetDetail/Breeding；C 接口就绪后接真实数据 |
 | E | 暂停 | 美术不参与本轮 |
 
 - 可同时跑 **3~4 个**（A、D、C，加 B 装好编辑器后）；上限 4（COLLABORATION §1）。
@@ -240,6 +240,7 @@ app 层禁止直接调 wx.*，统一走 platform adapter（ESLint 已配置）�
 | M1 首批 A/C/D 已合并、246 测试全绿 | ✅ |
 | A 的 `createPet` 追加任务 | ✅ 已完成并合入（contract-v1.2） |
 | B 的 Cocos 编辑器版本 | ✅ Cocos Creator 3.8.8（`C:\ProgramData\cocos\editors\Creator.8.8`） |
+| B 客户端首批 | ✅ 已合入；`sync-lib --check` 已进 CI |
 
 每个会话开工先跑：
 
@@ -313,3 +314,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 | v1.4 | 2026-10-29 | A 第二批完成并合入；D/C 解锁；记录 sim 初版结果 |
 | v1.5 | 2026-10-29 | §2/§3 替换为 C/D 第二批提示词（初始档+宠物操作 / 分关平衡+新字段） |
 | v1.6 | 2026-10-29 | C/D 第二批合并；§2/§6 替换为 C 第三批与 A 第三批提示词（contract-v1.3） |
+| v1.7 | 2026-10-29 | B 客户端首批合入；状态表与检查清单更新 |
