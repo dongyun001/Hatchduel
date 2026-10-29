@@ -17,9 +17,9 @@
 
 | 会话 | 状态 | 下一步 |
 |---|---|---|
-| A | 第二批已完成；**第三批待做**（v1.3：测试解耦 + 栖息地函数 + PvE setup） | 按 §6；解 D/C 阻塞 |
-| D | 第二批已完成并合入（分关平衡/近亲修复/栖息地字段） | 等 A 测试解耦后调水/土系；用真实路径复跑 |
-| C | 第二批已完成并合入（初始档/宠物操作/编队） | **等 A 第三批**，然后按 §2 接栖息地端点与放生闭环 |
+| A | **第三批已完成并合入**（v1.3：测试解耦、留能量 AI、栖息地函数、PvE setup、hit 修正） | 下一批：技能冷却、advanceProfile+栖息地组合写、繁殖编排 |
+| D | 第二批已完成并合入 | 调水/土系与饥饿惩罚（测试已解耦）；填 careRecoveryPerAction；按 P-049 处理 sim AI 口径 |
+| C | 第二批已完成并合入 | **第三批已解锁**：按 §2 接 6 个栖息地端点 + 放生闭环；PvE start 留到下一批 |
 | B | **首批已完成并合入**（Boot/Home/Habitat、平台层、ApiClient） | 下一批 PetList/PetDetail/Breeding；C 接口就绪后接真实数据 |
 | E | 暂停 | 美术不参与本轮 |
 
@@ -113,6 +113,18 @@ server/src/domain/{starter-profile,core-adapter,patch}.ts、packages/core/src/ap
 5. Postgres 端到端测试改用真实接口，不再手工改 profiles.data：
    guest 登录 → move 移出 → release → 重启后 GET /profile 少一只、codex owned 不回退。
 6. 生产默认 strict 保持；更新 docs/ONLINE_DESIGN.md §16 端点表与流水线说明。
+
+A 第三批已提供（HabitatError.name === 'HabitatError'，带 code）：
+- pet_not_found → PET_NOT_FOUND(404)
+- habitat_not_found / food_not_found → NOT_FOUND(404)
+- capacity_full → CAPACITY_FULL(409)
+- insufficient_resources → INSUFFICIENT_RESOURCES(409)
+- egg_not_allowed / max_level / slot_conflict → VALIDATION_FAILED(400)
+
+注意：`collectHabitat` 只返回 `{ profile, patch }`，`collected` 必须在调用前快照
+`habitat.stored`（整数部分）算出来；`feed/clean/play` 当前允许宠物不在栖息地（默认恢复量），
+先按现状接，是否限制为“栖息地内互动”等产品确认。`in_defense` 映射已由 A 加在
+`server/src/errors.ts`（一行），本批确认保留即可。
 
 专项验收：
 - pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config 通过。
@@ -239,6 +251,7 @@ app 层禁止直接调 wx.*，统一走 platform adapter（ESLint 已配置）�
 | `@vitest/coverage-v8`、`pg` 已加入 | ✅ |
 | M1 首批 A/C/D 已合并、246 测试全绿 | ✅ |
 | A 的 `createPet` 追加任务 | ✅ 已完成并合入（contract-v1.2） |
+| A 第三批（v1.3） | ✅ 已完成并合入（342 测试，core 覆盖 98.97%） |
 | B 的 Cocos 编辑器版本 | ✅ Cocos Creator 3.8.8（`C:\ProgramData\cocos\editors\Creator.8.8`） |
 | B 客户端首批 | ✅ 已合入；`sync-lib --check` 已进 CI |
 
@@ -315,3 +328,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 | v1.5 | 2026-10-29 | §2/§3 替换为 C/D 第二批提示词（初始档+宠物操作 / 分关平衡+新字段） |
 | v1.6 | 2026-10-29 | C/D 第二批合并；§2/§6 替换为 C 第三批与 A 第三批提示词（contract-v1.3） |
 | v1.7 | 2026-10-29 | B 客户端首批合入；状态表与检查清单更新 |
+| v1.8 | 2026-10-29 | A 第三批合入；C 第三批补错误映射与 collected 口径；D 下一步更新 |
