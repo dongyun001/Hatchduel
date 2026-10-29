@@ -33,6 +33,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://petbattle:petbattle@db:5432/petbattle
       PETBATTLE_STORE: ${PETBATTLE_STORE:-postgres}
+      # 生产默认 strict：core 未实现/配置缺失时直接 501 或启动失败，不静默假推进（P-043）。
+      PETBATTLE_CORE_STUB: ${PETBATTLE_CORE_STUB:-strict}
       PETBATTLE_TOKEN_SECRET: ${PETBATTLE_TOKEN_SECRET:-dev-only-insecure-secret}
       # 2C2G：连接池 ≤20（TECH_DESIGN §16.1）。
       PG_POOL_MAX: 10

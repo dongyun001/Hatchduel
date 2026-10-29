@@ -10,6 +10,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AuthAccount, AuthProvider, AuthResponse } from '@petbattle/protocol';
+import type { ConfigRepo } from '@petbattle/core';
 
 import type { KeyedMutex } from '../concurrency.js';
 import { createInitialProfile } from '../domain/starter-profile.js';
@@ -28,6 +29,8 @@ export interface AuthServiceOptions {
   mutex: KeyedMutex;
   accessTokenTtlMs: number;
   refreshTokenTtlMs: number;
+  /** 首次登录要建初始档（初始 3 只宠物由 core 生成）；缺失时登录报 CONFIG_INVALID。 */
+  configRepo?: ConfigRepo;
 }
 
 export class AuthService {
@@ -133,11 +136,17 @@ export class AuthService {
     }
   }
 
-  private async ensureProfile(accountId: string, now: number): Promise<{ revision: number }> {    const { store } = this.options;
+  private async ensureProfile(accountId: string, now: number): Promise<{ revision: number }> {
+    const { store, configRepo } = this.options;
     const existing = await store.getProfile(accountId);
     if (existing !== undefined) return existing;
 
-    await store.createProfile(createInitialProfile(accountId, now));
+    if (configRepo === undefined) {
+      throw new AppError('CONFIG_INVALID', '配置仓库不可用，无法生成初始存档');
+    }
+
+    // 初始档由 core 建宠 + 推进生成；重复登录时上面的 early return 保证不会重复建宠。
+    await store.createProfile(createInitialProfile(accountId, now, configRepo));
     const created = await store.getProfile(accountId);
     if (created === undefined) throw new AppError('INTERNAL', '存档创建失败');
     return created;

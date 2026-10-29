@@ -2,9 +2,13 @@
 import type { RouteHandler, ServerDeps } from '../http/context.js';
 import type { Router } from '../http/router.js';
 import { registerAuthRoutes } from './auth.routes.js';
+import { registerLineupRoutes } from './lineup.routes.js';
+import { registerPetRoutes } from './pets.routes.js';
 import { registerProfileRoutes } from './profile.routes.js';
 
 export function registerRoutes(router: Router<RouteHandler>, deps: ServerDeps): void {
   registerAuthRoutes(router, deps);
   registerProfileRoutes(router, deps);
+  registerPetRoutes(router, deps);
+  registerLineupRoutes(router, deps);
 }

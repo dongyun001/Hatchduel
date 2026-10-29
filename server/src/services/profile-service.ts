@@ -10,11 +10,17 @@
  *
  * 服务端只决定“能不能做”，结果由 core 计算；端点不得自己改资源/宠物数值。
  */
-import type { Profile, ProfilePatch } from '@petbattle/core';
-import type { ProfileWriteResponse, RevisionConflictDetails } from '@petbattle/protocol';
+import type { PetId, PetInstance, Profile, ProfilePatch, ResourceBag, ResourceId } from '@petbattle/core';
+import type {
+  ProfileWriteResponse,
+  ReleasePetResponse,
+  RevisionConflictDetails,
+  SetLineupResponse,
+} from '@petbattle/protocol';
 
 import type { KeyedMutex } from '../concurrency.js';
 import type { CoreAdapter } from '../domain/core-adapter.js';
+import { validateLineup } from '../domain/lineup.js';
 import { composePatch } from '../domain/patch.js';
 import { AppError } from '../errors.js';
 import type { Logger } from '../logger.js';
@@ -52,6 +58,46 @@ export interface RunWriteResult {
 export interface RenameResult {
   data: ProfileWriteResponse;
   revision: number;
+}
+
+export interface PetWriteParams {
+  accountId: string;
+  petId: PetId;
+  baseRevision: number;
+  now: number;
+  requestId?: string;
+}
+
+export interface RenamePetParams extends PetWriteParams {
+  name: string;
+}
+
+export interface SetPetLockParams extends PetWriteParams {
+  locked: boolean;
+}
+
+export interface ReleasePetParams extends PetWriteParams {
+  /** 审计里带上客户端视角，便于排查误放生投诉。 */
+  reason?: string;
+}
+
+export interface ProfileWriteResult {
+  data: ProfileWriteResponse;
+  revision: number;
+}
+
+export interface ReleaseWriteResult {
+  data: ReleasePetResponse;
+  revision: number;
+  refund: ResourceBag;
+}
+
+export interface SetLineupParams {
+  accountId: string;
+  petIds: unknown;
+  baseRevision: number;
+  now: number;
+  requestId?: string;
 }
 
 export class ProfileService {
@@ -95,6 +141,112 @@ export class ProfileService {
       },
       revision: profile.revision,
     };
+  }
+
+  async renamePet(params: RenamePetParams): Promise<ProfileWriteResult> {
+    const { accountId, petId, name, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'pet.rename',
+      auditDetail: { petId, name },
+      mutate: async (current) => {
+        const pet = requirePet(current, petId);
+        const nextPet: PetInstance = { ...pet, name, updatedAt: now };
+        return replacePet(current, petId, nextPet);
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
+  async setPetLock(params: SetPetLockParams): Promise<ProfileWriteResult> {
+    const { accountId, petId, locked, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: locked ? 'pet.lock' : 'pet.unlock',
+      auditDetail: { petId },
+      mutate: async (current) => {
+        const pet = requirePet(current, petId);
+        // 锁定只是标记位；放生/交易时的拒绝规则由 core 统一判定。
+        const nextPet: PetInstance = { ...pet, locked, updatedAt: now };
+        return replacePet(current, petId, nextPet);
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
+  async releasePet(params: ReleasePetParams): Promise<ReleaseWriteResult> {
+    const { accountId, petId, baseRevision, now, requestId, reason } = params;
+
+    let refund: ResourceBag = {};
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'pet.release',
+      auditDetail: { petId, reason: reason ?? null },
+      mutate: async (current) => {
+        // 五类拒绝（蛋/锁定/上阵/栖息地/最后成年）与返还金额全部由 core 判定。
+        const released = this.deps.core.releasePet(current, petId, now);
+        refund = released.refund;
+
+        const currencies = addResources(current.currencies, released.refund);
+        // 防守阵容与被放生的宠物解耦：避免留下悬空 id（lineup 由 core 直接拒绝）。
+        const defense = current.pvp.defense.filter((id) => id !== petId);
+        const pvp =
+          defense.length === current.pvp.defense.length
+            ? current.pvp
+            : { ...current.pvp, defense };
+
+        return {
+          profile: { ...released.profile, currencies, pvp },
+          patch: {
+            // patch 字段一律是"写入后的值"（与 pets.upsert/stats 语义一致）。
+            currencies,
+            pets: { remove: [petId] },
+            stats: released.profile.stats,
+            ...(pvp === current.pvp ? {} : { pvp }),
+          },
+        };
+      },
+    });
+
+    const data: ReleasePetResponse = {
+      patch,
+      revision: profile.revision,
+      serverTime: now,
+      refund,
+    };
+    return { data, revision: profile.revision, refund };
+  }
+
+  async setLineup(params: SetLineupParams): Promise<ProfileWriteResult & { data: SetLineupResponse }> {
+    const { accountId, petIds, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'lineup.set',
+      mutate: async (current) => {
+        const lineup = validateLineup(current, petIds);
+        return { profile: { ...current, lineup }, patch: { lineup } };
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
   }
 
   async runWrite(params: RunWriteParams): Promise<RunWriteResult> {
@@ -149,6 +301,40 @@ export class ProfileService {
       return { profile: nextProfile, patch };
     });
   }
+}
+
+function requirePet(profile: Profile, petId: PetId): PetInstance {
+  const pet = profile.pets[petId];
+  if (pet === undefined) throw new AppError('PET_NOT_FOUND', `宠物不存在：${petId}`);
+  return pet;
+}
+
+/** 单只宠物的替换：profile 与 patch 同步更新，避免两处各写一份。 */
+function replacePet(profile: Profile, petId: PetId, nextPet: PetInstance): MutationOutcome {
+  return {
+    profile: { ...profile, pets: { ...profile.pets, [petId]: nextPet } },
+    patch: { pets: { upsert: [nextPet] } },
+  };
+}
+
+/** 把 core 返回的返还包加到货币上；只做加法，金额由 core 计算。 */
+function addResources(
+  base: Record<ResourceId, number>,
+  delta: ResourceBag,
+): Record<ResourceId, number> {
+  const next: Record<ResourceId, number> = { ...base };
+  for (const [resource, amount] of Object.entries(delta) as Array<[ResourceId, number | undefined]>) {
+    if (amount === undefined) continue;
+    next[resource] = (next[resource] ?? 0) + amount;
+  }
+  return next;
+}
+
+function toWriteResult(profile: Profile, patch: ProfilePatch, now: number): ProfileWriteResult {
+  return {
+    data: { patch, revision: profile.revision, serverTime: now },
+    revision: profile.revision,
+  };
 }
 
 function revisionConflict(latest: Profile, expected: number): AppError {

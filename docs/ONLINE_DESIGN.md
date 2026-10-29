@@ -480,7 +480,7 @@ interface ApiResponse<T> {
 | 鉴权 | `Authorization: Bearer <accessToken>` | token 为 HMAC-SHA256 自签，payload 带 `accountId`/`sessionId` |
 | 协议版本 | `X-Protocol-Version: v1` | 可选；声明了且不等于 `v1` → 400 `VALIDATION_FAILED` |
 | 幂等 | `Idempotency-Key` | 与 `@petbattle/protocol` 常量一致 |
-| 存档版本 | `X-Base-Revision: <n>` | **尚未进 protocol**，服务端先用此名；建议 0 号补 `BASE_REVISION_HEADER` |
+| 存档版本 | `X-Base-Revision: <n>` | 与 `@petbattle/protocol` 的 `BASE_REVISION_HEADER` 一致（contract-v1.1 已补） |
 
 - 写操作缺任一 header → 400 `VALIDATION_FAILED`；`baseRevision` 必须是非负整数。
 - 幂等命名空间：登录态写操作用 `accountId`；`/auth/guest` 用 `device:<deviceId>`；`/auth/refresh` 用 `refresh:<sha256(refreshToken)>`。同一 key 不同指纹 → 409 `IDEMPOTENCY_CONFLICT`；重放响应带 `Idempotency-Replayed: true`。
@@ -495,13 +495,15 @@ interface ApiResponse<T> {
 - 先校验 revision 再推进：过期客户端不会白白触发一次时间推进。
 - CAS 失败（并发/多实例）→ 重新读最新档，返回 409 + `RevisionConflictDetails`。
 - `ProfilePatch` 由 `core` 的推进增量与端点增量合并（`server/src/domain/patch.ts`），`revision` 与 `at/lastEvaluatedAt` 由服务端覆写。
+- **patch 字段一律是"写入后的值"**，不是增量：`currencies` 下发完整四键、`lineup` 下发完整数组、`pets.upsert` 是整只宠物、`pets.remove` 是要删的 id。放生的返还金额同时出现在 `ReleasePetResponse.refund`（便于客户端做飘字），`currencies` 仍是绝对值。
 - 审计写入失败不回滚业务写入，但记 `error` 日志。
 
-### 16.4 core 桥接与降级
+### 16.4 core 桥接、初始档与降级
 
-- 服务端只通过 `CoreAdapter` 调 `advanceProfile`；业务端点不得自行改资源/宠物数值。
-- M1 早期 `createConfigRepo`/`advanceProfile` 仍是契约桩：配置仓库不可用或抛 `CoreNotImplementedError` 时降级为**恒等推进**（不动数据、不产资源，只补 revision/时间），并在日志告警。`PETBATTLE_CORE_STUB=strict` 可关闭降级，让未实现直接变 501。A 交付后无需改服务端代码。
-- 新账号的初始存档目前是**结构完整的空档**（`domain/starter-profile.ts`）：初始 3 只宠物属于领域规则，等 core 提供工厂后替换，服务端不复制这套规则。
+- 服务端只通过 `CoreAdapter` 调领域函数（`advanceProfile` / `releasePet`）；业务端点不得自行改资源、宠物属性或阶段。
+- **初始档（`domain/starter-profile.ts`）**：调 `createPet` 建 3 只（水龟/雷鱼/草蛙，四项基因 50，generation 1，parents `[null,null]`，性别 male/female/male），出生时间取 `now - hatchMs - juvenileMs`，再对整档调 `advanceProfile(profile, now, cfg)`，断言全部 `adult` 且 `fertility.readyAt <= now`；栖息地 `meadow` 1 级、3 只占位 + 1 空；资源取 `economy.startingResources`；图鉴写 3 个组合、`bestGene = 50`；最终 `revision = 0`、`createdAt = lastEvaluatedAt = now`（首次登录不结算离线产出）。服务端不手写阶段阈值/衰减/产出。
+- 降级只保留给"配置仓库缺失"这一种本地开发场景：`PETBATTLE_CORE_STUB=strict`（**compose 默认**）时启动即拒绝，或缺配置直接 501；`memory` 本地模式可显式放宽。core 已无契约桩，正常启动日志不应出现"降级"。
+- 需要配置的操作（放生、建宠）没有降级余地：配置缺失返回 `CONFIG_INVALID`。
 
 ### 16.5 存储
 
@@ -509,19 +511,35 @@ interface ApiResponse<T> {
 - Postgres：账号的外部身份列各自唯一；存档整档存 `profiles.data`（jsonb），写入按 `revision` 条件更新做 CAS；幂等体用 `json`（**不是 jsonb**）保证重放逐字节一致。
 - 迁移：`server/src/storage/migrations/001_init.sql`，启动时先迁移再监听；迁移向前兼容。
 - 2C2G：`PG_POOL_MAX` 默认 10、硬上限 20；容器 `--max-old-space-size=1024`；异步 PvP 用 `Semaphore`（默认并发 2），M1 只留接口不接线。
-- **待 0 号处理**：`pg` 驱动尚未写入 `server/package.json`（锁文件归 0 号）。镜像里用独立目录 + `NODE_PATH` 兜底；本地测试用临时目录装 `pg` 验证过迁移与全链路。
+- `pg` 已是 `server` 的正式依赖（0 号在 M1 首批合并时补齐）；compose 默认 `PETBATTLE_CORE_STUB=strict`。
 
-### 16.6 已实现端点（M1 首批）
+### 16.6 已实现端点
 
 | 端点 | 行为 |
 |---|---|
 | `GET /health` | 契约原样 |
-| `POST /auth/guest` | `deviceId` → 账号（首次创建 + 空档）、access/refresh token、`profileRevision` |
+| `POST /auth/guest` | `deviceId` → 账号；首次登录用 core 生成初始档（3 只成年宠 + 栖息地 + 图鉴 + 初始资源）；返回 access/refresh token 与 `profileRevision` |
 | `GET /profile` | 返回全量档 + `revision`；**只读，不推进时间**；`sinceRevision` 暂忽略（CONTRACT §10.6 的决定） |
 | `POST /profile/rename` | 改账号 `displayName`，revision +1 并返回 patch |
+| `POST /pets/:id/rename` | 宠物改名（1~12 字符，去除首尾空白；归属校验）；revision +1 |
+| `POST /pets/:id/lock` | 设置 `locked`（布尔）；只改标记位，放生时的拒绝由 core 判定 |
+| `POST /pets/:id/release` | 调 `core.releasePet`：五类拒绝映射为 `EGG_NOT_RELEASABLE` / `PET_LOCKED` / `PET_IN_USE` / `LAST_ADULT` / `PET_NOT_FOUND`；返还基因尘写回 `currencies`，图鉴 `owned` 不回退，同时清掉防守阵容里的悬空 id，写 `pet.release` 审计 |
+| `POST /lineup/set` | 出战编队：≤3、属于本人、引用存在、非蛋、不重复；幼年可上阵；与 `pvp/defense` 互不联动 |
 
-### 16.7 尚未实现
+- 所有写端点都要求 `Idempotency-Key` + `X-Base-Revision`，并走同一流水线与审计。
 
-- 微信 `code2session` / Steam 票据校验（需要外部密钥与网络，等环境变量就绪）。
-- `/account/bind|unbind`、栖息地、宠物、繁殖、战斗、编队、PvP、排行榜、好友：等 core 实现后按同一流水线接线。
-- 限流（按账号/IP）与异常检测；`battle_sessions` 表与 `BattleSessionStore` 已留位。
+### 16.7 尚未实现（等 core 公共函数）
+
+| 端点 | 缺的 core API | 说明 |
+|---|---|---|
+| `/habitat/collect` | 无独立函数，需要"领取 stored → currencies"的领域出口 | 现有 `advanceProfile` 只累积 `habitat.stored`；领取属于经济变更，应由 core 提供（或明确允许服务端做纯搬运） |
+| `/habitat/feed` `/habitat/clean` `/habitat/play` | 无 `feed/clean/play` 函数 | 食物消耗与状态恢复规则在 DOMAIN §5.3，需要 A 补 |
+| `/habitat/upgrade` | 无 `upgradeHabitat` 函数 | 成本/容量/产出系数在配置里，但扣费与等级推进应有领域函数 |
+| `/breeding/start` `/breeding/claim` | `checkBreeding`/`breed` 已可用；缺"蛋的孵化领取"出口（`breed` 返回 child，孵化推进靠 `advanceProfile`） | 冷却落库需要 `parentCooldowns`（v1.2 已提供），可接线 |
+| `/battle/pve/start` `/battle/pve/claim` | `buildBattleSetup`/`buildEnemyTeam`/`BattleEngine` 已可用 | 需要确定战斗会话存储与奖励发放口径（CONTRACT §10.2） |
+| `/pvp/defense` `/pvp/opponent` `/pvp/fight` `/pvp/replay/:id` | `buildBattleSetup` 已可用；匹配与战报存储未定义 | 需先定匹配/快照/回放模型 |
+| `/leaderboard` `/friends` `/friends/:id/visit` | — | 指标口径（CONTRACT §10.3）与好友规则未定 |
+| `/account/bind` `/account/unbind` `/auth/wechat` `/auth/steam` | — | 需要平台密钥与外部网络校验 |
+| 限流与异常检测 | — | 按账号/IP，Redis 后置 |
+
+- `battle_sessions` 表与 `BattleSessionStore` 接口已留位，用于 PvP 快照/重放（PITFALLS P-027）。

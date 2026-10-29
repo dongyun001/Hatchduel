@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createInitialProfile } from '../src/domain/starter-profile.js';
+import type { Profile } from '@petbattle/core';
+
 import { InMemoryStore } from '../src/storage/memory.js';
 import type { AccountRecord, StoredResponse } from '../src/storage/types.js';
 
@@ -12,6 +13,34 @@ function account(id: string, deviceId: string): AccountRecord {
     status: 'active',
     createdAt: 1000,
     bindings: { guest: { deviceId } },
+  };
+}
+
+/** 只关心 revision 的存档 fixture：store 层不校验领域内容。 */
+function profileFixture(accountId: string, now = 1000, revision = 0): Profile {
+  return {
+    version: 1,
+    accountId,
+    revision,
+    createdAt: now,
+    lastEvaluatedAt: now,
+    currencies: { coin: 0, food: 0, geneDust: 0, premium: 0 },
+    pets: {},
+    habitats: {},
+    codex: {},
+    lineup: [],
+    stageProgress: {},
+    breeding: { eggs: [], cooldowns: {} },
+    pvp: { defense: [], rating: 1000, seasonId: 'preseason' },
+    settings: { sfx: true, bgm: true },
+    stats: {
+      battlesWon: 0,
+      battlesLost: 0,
+      breeds: 0,
+      hatchlings: 0,
+      mutations: 0,
+      released: 0,
+    },
   };
 }
 
@@ -49,7 +78,7 @@ describe('InMemoryStore：账号', () => {
 describe('InMemoryStore：存档 revision CAS', () => {
   it('期望版本一致才写入', async () => {
     const store = new InMemoryStore();
-    await store.createProfile(createInitialProfile('acc_1', 1000));
+    await store.createProfile(profileFixture('acc_1', 1000));
 
     const current = await store.getProfile('acc_1');
     if (current === undefined) throw new Error('存档不存在');
@@ -65,13 +94,13 @@ describe('InMemoryStore：存档 revision CAS', () => {
 
   it('存档不存在时 CAS 失败而不是凭空创建', async () => {
     const store = new InMemoryStore();
-    expect(await store.saveProfile(createInitialProfile('ghost', 1000), 0)).toBe(false);
+    expect(await store.saveProfile(profileFixture('ghost', 1000), 0)).toBe(false);
   });
 
   it('createProfile 幂等，重复创建不覆盖已有进度', async () => {
     const store = new InMemoryStore();
-    await store.createProfile({ ...createInitialProfile('acc_1', 1000), revision: 5 });
-    await store.createProfile(createInitialProfile('acc_1', 9999));
+    await store.createProfile({ ...profileFixture('acc_1', 1000), revision: 5 });
+    await store.createProfile(profileFixture('acc_1', 9999));
     expect((await store.getProfile('acc_1'))?.revision).toBe(5);
   });
 });

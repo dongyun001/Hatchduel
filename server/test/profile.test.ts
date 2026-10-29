@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Profile } from '@petbattle/core';
 import type { GetProfileResponse, ProfileWriteResponse, RevisionConflictDetails } from '@petbattle/protocol';
 
+import { STARTER_PET_SPECS } from '../src/domain/starter-profile.js';
+import { testConfigRepo } from './fixtures.js';
 import {
   authHeaders,
   expectError,
@@ -49,14 +51,15 @@ describe('GET /profile', () => {
   });
 
   it('返回服务器权威存档与 revision', async () => {
+    const repo = await testConfigRepo();
     const call = await get(harness, '/profile', authHeaders(token));
     expect(call.status).toBe(200);
     expect(call.body.revision).toBe(0);
 
     const data = call.body.data as GetProfileResponse;
     expect(data.profile.revision).toBe(0);
-    expect(data.profile.currencies.coin).toBe(0);
-    expect(data.profile.pets).toEqual({});
+    expect(data.profile.currencies.coin).toBe(repo.economy().startingResources.coin ?? 0);
+    expect(Object.keys(data.profile.pets)).toHaveLength(STARTER_PET_SPECS.length);
     expect(data.serverTime).toBe(harness.clock.now());
   });
 });
