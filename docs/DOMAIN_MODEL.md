@@ -16,6 +16,7 @@
 |---|---|---|
 | v1.0 | 2026-10-27 | 初版：个体/基因/繁殖/时间/经济/战斗接口 |
 | v1.1 | 2026-10-28 | 新增被动表、经验曲线、回合结算顺序、敌方快照；修复突变计数、产出系数、状态边界、不变量 |
+| v1.2 | 2026-10-29 | 追加 §15 实现说明（A 会话，contract-v1）：派生属性取整口径、推进顺序落地、繁殖冷却、战斗状态与契约缺口 |
 
 ---
 
@@ -971,3 +972,63 @@ interface Profile {
 3. 基因波动标准差 8 是否合适；突变率是否要按代数调整。
 4. 离线衰减 24 小时上限是否足够宽容。
 5. 放生返还公式是否需要按代数/稀有特质再调。
+
+---
+
+## 15. 实现说明（contract-v1，A 会话）
+
+> 本节只记录 `packages/core` 的实现口径，不改变 §1~§13 的产品规则。契约签名、常量、schema 未动。
+
+### 15.1 派生属性（§4.1）
+
+- `hp/atk/def/spd`：`floor(base × levelMul × stageMul × geneMul × condMul × traitMul × passiveMul × affinityMul)`。
+- `crit/critDmg/hit/dodge`：只乘 `condMul/traitMul/passiveMul`，**保留 4 位小数**后 clamp（`crit 0~1`、`dodge 0~0.9`、`hit ±0.5`）。
+  若对这些比例值也 `floor`，`0.05 × 1.06 = 0` 会把暴击率直接抹平；DOMAIN §1「倍率保留 4 位小数」按此执行。
+- 蛋阶段 8 项全部返回 0（不参与战斗与产出）。
+- **待确认**：`condMul` 作用于 `critDmg` 后，满状态宠物暴击为 `1.5 × 1.1 = 1.65`（DOMAIN §4.1 明确写了 condMul 作用于全部属性）；
+  与 AGENTS §3.5「暴击 150%」有口径差，暂按 DOMAIN 实现，等 0 号/PRD 裁定。
+
+### 15.2 时间推进（§5/§6/§7）
+
+- `advancePet`：只做阶段推进（`egg → juvenile → adult → elder`，长时间离线可一次跨多级，`stageChangedAt` 落在阈值时刻）与 `updatedAt`；繁殖冷却 `cooldownUntil` 是绝对时间戳，到期即可繁殖，无需清零。
+- 状态衰减依赖栖息地的 `conditionDecayPerHour`，而个体只持有 `habitatId`（实例 id，不是 configId），
+  所以衰减在 `advanceProfile` 内、产出之前完成（等价于「先宠物、后栖息地」）：先按宠物所在栖息地找配置，衰减 `decayCapMs` 封顶的时长，再用推进后的状态算产出。
+- 产出：`dtHours` 不截断到整小时（不足 10 分钟按比例算），每个资源单独 `floor`；宠物数为 0 或全为蛋时产出 0。
+  阶段产出系数：幼年 0.5 / 成年 1 / 老年 0.8（暂写在代码常量里，后续可数据化）。
+- 消耗：每只非蛋宠物按 `upkeepPerPetPerHour × dtHours` 从 `habitat.stored` 扣，不足时归零、欠账不跨期。
+  「食物不足额外扣饥饿」的系数配置里没有，暂只记录缺口、不额外扣状态（待 D 补字段）。
+- `advanceProfile` 不改入参：返回新的 `profile` 与 `patch`；有变化才 `revision + 1`，同一 `now` 第二次调用 patch 不含 upsert。
+
+### 15.3 繁殖 / 放生（§8）
+
+- `breed` 的 rng 消费顺序固定：物种 pick → 属性 pick → 属性突变 chance(+pick) → 四项基因各 12 次 → 隐性特质 chance → 特质突变 chance(+pick) → 性别 chance。改动顺序等于改确定性。
+- 子代 `id` 用 `egg_{a.id}_{b.id}_{now}`（正式 id 由服务器生成）；`mutationCount` 只统计属性/特质突变。
+- 父母冷却：`cooldownMs × (1 + 近亲惩罚) × (老年 ×2)`，由 `breedingCooldownMs()` 提供；
+  契约里的 `breed` 只返回子代，父母冷却需服务端写回（见 §15.5）。
+- `checkBreeding` 的「空位」= 存档内各栖息地实例当前等级容量之和；占位 = 宠物数 + 蛋数。
+- `releasePet` 签名不带 `ConfigRepo`，返还基因尘按 §8.6 字面参数（5 + 等级×2 + 基因和÷10，至少 1），
+  稀有特质加成拿不到 `TraitConfig.rarity`，暂计 0。
+
+### 15.4 战斗（§9）
+
+- 指令驱动：`submit` 推进当前行动者的一个动作，返回该步事件（含回合切换、精力、DOT、buff 计时、重排）。
+  `availableCommands(uid)` 只在轮到该单位时非空，按「技能顺序 × 合法目标」展开，最后附 `surrender`。
+- 精力：创建时 0，第 1 回合开始即 +20；普攻命中 +10；技能在伤害结算后扣 cost（与 §9.3 顺序一致）。
+- 伤害：命中 = `clamp(0.90 + hit − dodge, 0.05, 1)`；暴击 `rng() < crit`，倍率取 `stats.critDmg`；
+  克制由 `ConfigRepo.counterMultiplier` 给 1.25/0.85/1；浮动 `0.95 + rng()×0.10`；最后 `floor`。
+- 同速：创建时用独立种子流 `seed ^ 0x9E3779B9` 给每个单位分配随机 tiebreaker，排序键 `(-spd, tiebreak, uid)`；交换队伍不影响分布（P-004）。
+- 状态：`stun` 在轮到该单位时消耗并跳过；`silence` 禁主动技能；`slow/debuff/buff` 按 `stat` 修正 atk/def/spd；`dot` 在回合开始按施加顺序结算；`shield` 优先吸收伤害。
+  同类 buff 不叠加，取更强数值并刷新更长时间。技能效果未填 `target` 时跟随技能目标；被动开场效果必须带 `target`。
+- 30 回合：第 30 回合结算完仍未分胜负 → `battleEnd { winner: null, turns: 30 }`。
+- `battleStart` 内嵌的 `state` 是**不含日志**的快照，避免循环引用。
+
+### 15.5 契约缺口（需 0 号裁定，A 未私改签名）
+
+| 缺什么 | 影响 | 建议 |
+|---|---|---|
+| 无配置的 `releasePet` | 稀有特质返还加成无法计算 | 加可选 `cfg` 参数或改为 `releaseValue(pet, economy)` |
+| `breed` 不返回父母冷却 | 服务端需自行按同一口径写回 | 导出 `parentsCooldownUntil` 或让 `breed` 返回 `{ child, inbred, cooldowns }` |
+| 无公开 AI 入口 | PVE 敌方决策由调用方实现，容易各写一套 | `BattleEngine.autoCommand(uid)` 或 `chooseAiCommand` 进公共导出 |
+| 技能 `cooldown`（回合）未实现 | 配置里有该字段但 MVP 数据未用 | 明确 MVP 忽略；后续加 `BattleBuff` 之外的冷却表 |
+
+

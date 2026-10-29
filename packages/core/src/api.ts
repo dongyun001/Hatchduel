@@ -1,16 +1,29 @@
 /**
  * core 公共函数签名（TECH_DESIGN §7.2，DOMAIN_MODEL §7/§8/§9）。
  *
- * M0 只冻结签名：除 `expToNext` 与 `validateConfig` 外一律抛 `CoreNotImplementedError`。
- * 实现由 A 会话负责；改动签名等同改契约，需升版本并通知 B/C/D。
+ * contract-v1 冻结：导出名、参数、返回类型不得改；需要改按 docs/CONTRACT.md §9.3 提请求。
+ * 实现分散在 `src/*` 与 `src/battle/*`，本文件只保留签名与转发。
  */
 import type { ConfigData, ConfigRepo, StageConfig } from './config/types.js';
-import { CoreNotImplementedError } from './errors.js';
 import type { AncestorRef, Gender, Genome, PetId, PetInstance } from './types/pet.js';
 import type { HabitatInstance, Profile, ProfilePatch, ResourceBag } from './types/profile.js';
 import type { ElementId, EpochMs, Id, Rng } from './types/common.js';
 import type { BattleSetup, BattleUnitInit, BattleEvent, BattleState, Command } from './types/battle.js';
 import type { StatBlock } from './types/stats.js';
+
+import { createConfigRepoImpl } from './config/repo.js';
+import { CoreNotImplementedError } from './errors.js';
+import { deriveStatsImpl } from './stats.js';
+import { advanceHabitatImpl, advancePetImpl, advanceProfileImpl } from './advance.js';
+import { breedImpl, checkBreedingImpl, isInbredImpl } from './breeding.js';
+import { releasePetImpl } from './release.js';
+import { buildBattleSetupImpl, buildEnemyTeamImpl } from './battle/setup.js';
+import {
+  availableCommandsImpl,
+  createBattleContextImpl,
+  submitCommandImpl,
+  type BattleContext,
+} from './battle/engine.js';
 
 /** 建宠输入；正式 ID 由服务器生成（客户端可用临时 ID）。 */
 export interface CreatePetInput {
@@ -71,24 +84,24 @@ export interface ReleaseResult {
   refund: ResourceBag;
 }
 
-function notImplemented(fn: string): never {
-  throw new CoreNotImplementedError(fn);
-}
-
 /**
  * 按配置仓库构造只读配置索引；加载时校验（`validateConfig`）。
  * 失败时抛错，不做部分加载。
  */
-export function createConfigRepo(_data: ConfigData): ConfigRepo {
-  return notImplemented('createConfigRepo');
+export function createConfigRepo(data: ConfigData): ConfigRepo {
+  return createConfigRepoImpl(data);
 }
 
 /**
  * 创建个体。派生属性不落库，按需 `deriveStats`。
  * 蛋阶段的 `fertility.readyAt` 按 hatch + juvenile 计算。
+ *
+ * 尚未实现（M0 契约桩）：`createPet` 不在首批范围内。
  */
-export function createPet(_input: CreatePetInput, _cfg: ConfigRepo): PetInstance {
-  return notImplemented('createPet');
+export function createPet(input: CreatePetInput, cfg: ConfigRepo): PetInstance {
+  void input;
+  void cfg;
+  throw new CoreNotImplementedError('createPet');
 }
 
 /**
@@ -105,8 +118,8 @@ export function createPet(_input: CreatePetInput, _cfg: ConfigRepo): PetInstance
  * - 相性在建战时修正基础属性，伤害公式里不再乘算（PITFALLS P-003 类推）；
  * - 全程 double，最后一次性 floor。
  */
-export function deriveStats(_pet: PetInstance, _cfg: ConfigRepo): StatBlock {
-  return notImplemented('deriveStats');
+export function deriveStats(pet: PetInstance, cfg: ConfigRepo): StatBlock {
+  return deriveStatsImpl(pet, cfg);
 }
 
 /**
@@ -114,11 +127,11 @@ export function deriveStats(_pet: PetInstance, _cfg: ConfigRepo): StatBlock {
  * 同一 `now` 重复调用不产生额外变化；`now` 早于内部时间戳抛 `TimeError('time_backwards')`。
  */
 export function advancePet(
-  _pet: PetInstance,
-  _now: EpochMs,
-  _cfg: ConfigRepo,
+  pet: PetInstance,
+  now: EpochMs,
+  cfg: ConfigRepo,
 ): AdvancePetResult {
-  return notImplemented('advancePet');
+  return advancePetImpl(pet, now, cfg);
 }
 
 /**
@@ -126,12 +139,13 @@ export function advancePet(
  * 产出按 dtHours 线性插值，不足 10 分钟的零头保留；宠物数为 0 时产出为 0，不除以 0。
  */
 export function advanceHabitat(
-  _habitat: HabitatInstance,
-  _pets: readonly PetInstance[],
-  _now: EpochMs,
-  _cfg: ConfigRepo,
+  habitat: HabitatInstance,
+  pets: readonly PetInstance[],
+  now: EpochMs,
+  cfg: ConfigRepo,
 ): AdvanceHabitatResult {
-  return notImplemented('advanceHabitat');
+  const result = advanceHabitatImpl(habitat, pets, now, cfg);
+  return { habitat: result.habitat, produced: result.produced };
 }
 
 /**
@@ -144,11 +158,11 @@ export function advanceHabitat(
  * 顺序固定，不得交换；幂等；`now < lastEvaluatedAt` 抛 `TimeError('time_backwards')`。
  */
 export function advanceProfile(
-  _profile: Profile,
-  _now: EpochMs,
-  _cfg: ConfigRepo,
+  profile: Profile,
+  now: EpochMs,
+  cfg: ConfigRepo,
 ): AdvanceProfileResult {
-  return notImplemented('advanceProfile');
+  return advanceProfileImpl(profile, now, cfg);
 }
 
 /**
@@ -156,13 +170,13 @@ export function advanceProfile(
  * 近亲不阻断繁殖，只在 `inbred` 标记并由 UI 警告。
  */
 export function checkBreeding(
-  _a: PetInstance,
-  _b: PetInstance,
-  _now: EpochMs,
-  _profile: Profile,
-  _cfg: ConfigRepo,
+  a: PetInstance,
+  b: PetInstance,
+  now: EpochMs,
+  profile: Profile,
+  cfg: ConfigRepo,
 ): BreedCheck {
-  return notImplemented('checkBreeding');
+  return checkBreedingImpl(a, b, now, profile, cfg);
 }
 
 /**
@@ -172,26 +186,26 @@ export function checkBreeding(
  * 只消费传入的 rng；调用顺序固定，不要在不同分支“多抽一次”。
  */
 export function breed(
-  _a: PetInstance,
-  _b: PetInstance,
-  _now: EpochMs,
-  _cfg: ConfigRepo,
-  _rng: Rng,
+  a: PetInstance,
+  b: PetInstance,
+  now: EpochMs,
+  cfg: ConfigRepo,
+  rng: Rng,
 ): BreedResult {
-  return notImplemented('breed');
+  return breedImpl(a, b, now, cfg, rng);
 }
 
 /** 近亲判定：双方及 `maxDepth` 代内祖先是否有交集（默认 3 代）。 */
-export function isInbred(_a: PetInstance, _b: PetInstance, _maxDepth: number): boolean {
-  return notImplemented('isInbred');
+export function isInbred(a: PetInstance, b: PetInstance, maxDepth: number): boolean {
+  return isInbredImpl(a, b, maxDepth);
 }
 
 /**
  * 放生。蛋 / 锁定 / 上阵 / 栖息地中 / 最后一只成年不可放生；返还基因尘；
  * 图鉴 owned 不回退；调用方写审计日志。
  */
-export function releasePet(_profile: Profile, _petId: PetId, _now: EpochMs): ReleaseResult {
-  return notImplemented('releasePet');
+export function releasePet(profile: Profile, petId: PetId, now: EpochMs): ReleaseResult {
+  return releasePetImpl(profile, petId, now);
 }
 
 /**
@@ -199,11 +213,11 @@ export function releasePet(_profile: Profile, _petId: PetId, _now: EpochMs): Rel
  * uid 由本函数生成（"a0"/"b0"）；不读全局状态；同一输入必须得到同一输出。
  */
 export function buildBattleSetup(
-  _teams: readonly [readonly PetInstance[], readonly PetInstance[]],
-  _cfg: ConfigRepo,
-  _seed: number,
+  teams: readonly [readonly PetInstance[], readonly PetInstance[]],
+  cfg: ConfigRepo,
+  seed: number,
 ): BattleSetup {
-  return notImplemented('buildBattleSetup');
+  return buildBattleSetupImpl(teams, cfg, seed);
 }
 
 /**
@@ -212,32 +226,41 @@ export function buildBattleSetup(
  * [普攻, 属性小技能, 属性大招, 物种技能]。
  */
 export function buildEnemyTeam(
-  _stage: StageConfig,
-  _cfg: ConfigRepo,
-  _seed: number,
+  stage: StageConfig,
+  cfg: ConfigRepo,
+  seed: number,
 ): BattleUnitInit[] {
-  return notImplemented('buildEnemyTeam');
+  return buildEnemyTeamImpl(stage, cfg, seed);
 }
 
 /**
  * 回合制战斗引擎（DOMAIN_MODEL §9.3）。内部持有状态；`state` 返回只读快照。
+ *
+ * 指令驱动：`submit` 每次推进当前行动者的一个动作，返回本步事件；
+ * 回合切换（精力 +20、DOT、buff 计时、重排）并入同一次返回。
  */
 export class BattleEngine {
-  static create(_setup: BattleSetup, _cfg: ConfigRepo): BattleEngine {
-    return notImplemented('BattleEngine.create');
+  private readonly ctx: BattleContext;
+
+  private constructor(ctx: BattleContext) {
+    this.ctx = ctx;
+  }
+
+  static create(setup: BattleSetup, cfg: ConfigRepo): BattleEngine {
+    return new BattleEngine(createBattleContextImpl(setup, cfg));
   }
 
   /** 当前可提交的指令（按回合/存活/精力/目标校验）。 */
-  availableCommands(_uid: string): Command[] {
-    return notImplemented('BattleEngine.availableCommands');
+  availableCommands(uid: string): Command[] {
+    return availableCommandsImpl(this.ctx, uid);
   }
 
   /** 提交一条指令，返回本步产生的有序事件。 */
-  submit(_cmd: Command): BattleEvent[] {
-    return notImplemented('BattleEngine.submit');
+  submit(cmd: Command): BattleEvent[] {
+    return submitCommandImpl(this.ctx, cmd);
   }
 
   get state(): Readonly<BattleState> {
-    return notImplemented('BattleEngine.state');
+    return this.ctx.state;
   }
 }
