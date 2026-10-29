@@ -207,7 +207,9 @@ contentVersion: string
 | `expToNext(level)` | `40 + level × 20`（M0 唯一实现的公式） |
 | `applyExp(pet, amount, cfg)` | 加经验并按 `expToNext` 循环升级（≤20 级），返回新个体（v1.2 新增） |
 | `validateConfig(input)` / `assertConfig(input)` | 配置校验 |
-| `BattleEngine` | `create` / `availableCommands` / `submit` / `state` / `autoCommand(uid)`（v1.2） |
+| `applyProfilePatch(profile, patch)` | 纯函数：remove 优先于 upsert、currencies 覆盖、codex 不回退（v1.4） |
+| `startBreeding(profile, a, b, now, cfg, rng)` | 校验/扣费/产蛋/父母冷却/统计，返回 `{profile, patch, child, inbred, parentCooldowns}`（v1.4） |
+| `BattleEngine` | `create` / `availableCommands` / `submit` / `state` / `autoCommand(uid)`（v1.2）；技能回合冷却由 `BattleUnit.cooldowns?` 承载（v1.4） |
 
 contract-v1.2 的全部函数已实现，`contract.test.ts` 只保留常量与公式断言，不再有契约桩。
 
@@ -306,6 +308,16 @@ A 首批完成后提了 4 条变更请求和 3 条待明确项。裁定如下；
 | D-15 | 宠物名 12 字符是服务端暂定值 | 保持 12（中文 12 字足够，UI 可自行更短）；不改协议 | 无代码改动 |
 
 > D-05/D-06 的字段是**可选**的，避免 D 还没填数据时阻断 A；但两者都必须从配置读取，不允许 A 再写死第二套默认值。
+
+---
+
+### 7.3 第四批预裁定（contract-v1.4，2026-10-29）
+
+| 编号 | 议题 | 裁定 | 落地 |
+|---|---|---|---|
+| D-16 | 服务端/客户端都需要把 patch 应用到存档 | 新增 `applyProfilePatch(profile, patch): Profile` 纯函数；**remove 优先于 upsert**；`currencies` 按 patch 绝对值覆盖；`codex` 只允许 false→true；不校验 revision | A 实现 + 测试；C/B 复用 |
+| D-17 | 繁殖的校验、扣费、冷却、落蛋散在服务端 | 新增 `startBreeding(profile, aId, bId, now, cfg, rng): StartBreedingResult`，含 `BreedingError(reason: BreedError)`；服务端只负责 `advanceProfile → startBreeding → CAS` | A 实现；C 接 `/breeding/start` |
+| D-18 | `SkillConfig.cooldown` 未被引擎消费 | `BattleUnit.cooldowns?: Record<Id, number>`；回合开始递减、cast 后设置、`availableCommands` 过滤冷却中的技能；无该字段时行为不变 | A 实现 + 测试 |
 
 ---
 
@@ -493,3 +505,4 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | contract-v1.1 | 2026-10-29 | 兼容补充：`BASE_REVISION_HEADER`；记录 M1 首批集成结果与 `createPet` 缺口 |
 | contract-v1.2 | 2026-10-29 | core 签名集中调整（D-01~D-07）：`releasePet` 加 cfg、`BreedResult.parentCooldowns`、`BattleEngine.autoCommand`、`applyExp`、栖息地两个可选配置字段；协议不变 |
 | contract-v1.3 | 2026-10-29 | 解除 D/C 阻塞（D-08~D-15）：测试解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 `/habitat/move` 端点、`hit` 修正 |
+| contract-v1.4 | 2026-10-29 | 预裁定第四批（D-16~D-18）：`applyProfilePatch`、`startBreeding`、技能回合冷却 |
