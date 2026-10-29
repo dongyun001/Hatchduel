@@ -15,6 +15,8 @@ import { createConfigRepoImpl } from './config/repo.js';
 import { deriveStatsImpl } from './stats.js';
 import { advanceHabitatImpl, advancePetImpl, advanceProfileImpl } from './advance.js';
 import { breedImpl, checkBreedingImpl, isInbredImpl } from './breeding.js';
+import { startBreedingImpl } from './breeding-start.js';
+import { applyProfilePatchImpl } from './profile-patch.js';
 import { releasePetImpl } from './release.js';
 import {
   cleanPetImpl,
@@ -96,6 +98,45 @@ export interface BreedResult {
 export interface ReleaseResult {
   profile: Profile;
   refund: ResourceBag;
+}
+
+/** 繁殖编排结果（contract-v1.4 D-17）：`patch` 的 revision 保持输入值。 */
+export interface StartBreedingResult {
+  profile: Profile;
+  patch: ProfilePatch;
+  /** 新蛋（`stage = 'egg'`），同时已写入 `profile.pets` 与 `profile.breeding.eggs`。 */
+  child: PetInstance;
+  inbred: boolean;
+  /** 父母冷却到期时间，顺序与入参 `[parentA, parentB]` 一致。 */
+  parentCooldowns: [EpochMs, EpochMs];
+}
+
+/**
+ * 应用存档增量（contract-v1.4 D-16，PITFALLS P-047）。
+ *
+ * - `pets/habitats`：remove 优先于 upsert；
+ * - `currencies`：patch 中出现的资源是绝对值，直接覆盖（不累加）；
+ * - `codex`：只允许 false→true，`bestGene` 单调不减；
+ * - 其余章节整体替换；`revision` 取 `patch.toRevision`，不校验 `fromRevision`。
+ */
+export function applyProfilePatch(profile: Profile, patch: ProfilePatch): Profile {
+  return applyProfilePatchImpl(profile, patch);
+}
+
+/**
+ * 繁殖编排（contract-v1.4 D-17）：`checkBreeding` → 扣 `breeding.cost` → `breed` →
+ * 落蛋 / 父母冷却 / `stats.breeds + 1`。失败抛 `BreedingError`（`reason` 复用 `BreedError`，
+ * 父母不存在时为 `not_found`）。不推进时间；服务端先 `advanceProfile`。
+ */
+export function startBreeding(
+  profile: Profile,
+  parentAId: PetId,
+  parentBId: PetId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+  rng: Rng,
+): StartBreedingResult {
+  return startBreedingImpl(profile, parentAId, parentBId, now, cfg, rng);
 }
 
 /**

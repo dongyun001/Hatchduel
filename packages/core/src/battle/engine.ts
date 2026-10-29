@@ -61,6 +61,7 @@ function cloneUnit(unit: BattleUnit): BattleUnit {
     skills: [...unit.skills],
     traits: [...unit.traits],
     buffs: unit.buffs.map((buff) => ({ ...buff })),
+    ...(unit.cooldowns ? { cooldowns: { ...unit.cooldowns } } : {}),
   };
 }
 
@@ -362,6 +363,9 @@ function executeSkill(ctx: BattleContext, unit: BattleUnit, cmd: Extract<Command
   if (skill.cost > unit.energy) {
     throw new Error(`@petbattle/core: 精力不足（需要 ${skill.cost}，当前 ${unit.energy}）`);
   }
+  if ((unit.cooldowns?.[skill.id] ?? 0) > 0) {
+    throw new Error(`@petbattle/core: "${unit.uid}" 的技能 "${skill.id}" 还在冷却`);
+  }
 
   const targets = resolveCommandTargets(ctx, unit, skill, cmd.targetUids);
   emit(ctx, {
@@ -388,6 +392,11 @@ function executeSkill(ctx: BattleContext, unit: BattleUnit, cmd: Extract<Command
   unit.energy = clamp(unit.energy - skill.cost, 0, ENERGY_MAX);
   if (skill.kind === 'normal' && hitSomething) {
     unit.energy = clamp(unit.energy + ENERGY_ON_NORMAL_HIT, 0, ENERGY_MAX);
+  }
+
+  // 冷却：记 `cooldown + 1`，每回合开始递减；剩余 > 0 时不可再次选择。
+  if (skill.cooldown !== undefined && skill.cooldown > 0) {
+    unit.cooldowns = { ...(unit.cooldowns ?? {}), [skill.id]: skill.cooldown + 1 };
   }
 }
 
@@ -443,7 +452,17 @@ function startNextTurn(ctx: BattleContext): void {
     }
   }
 
-  // 4. 重排行动序
+  // 4. 技能冷却递减（无 cooldowns 字段的单位直接跳过，保持旧战斗事件流不变）
+  for (const unit of ctx.state.units) {
+    if (!unit.alive || !unit.cooldowns) continue;
+    for (const skillId of Object.keys(unit.cooldowns)) {
+      const remaining = (unit.cooldowns[skillId] ?? 0) - 1;
+      if (remaining > 0) unit.cooldowns[skillId] = remaining;
+      else delete unit.cooldowns[skillId];
+    }
+  }
+
+  // 5. 重排行动序
   ctx.state.order = sortOrder(ctx);
   ctx.state.cursor = 0;
   emit(ctx, { type: 'turnStart', order: [...ctx.state.order] });
@@ -564,6 +583,7 @@ export function availableCommandsImpl(ctx: BattleContext, uid: string): Command[
     }
     if (skill.kind === 'active' && silenced) continue;
     if (skill.cost > unit.energy) continue;
+    if ((unit.cooldowns?.[skill.id] ?? 0) > 0) continue;
     const targetSets = legalTargetsFor(ctx, unit, skill);
     for (const targets of targetSets) {
       commands.push({

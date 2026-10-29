@@ -776,3 +776,86 @@ describe('buildPveBattleSetup（D-10）', () => {
     expect(engine.state.phase).toBe('finished');
   });
 });
+
+describe('技能回合冷却（D-18）', () => {
+  function cdRepo(cooldown: number): ConfigRepo {
+    return makeSyntheticRepo((config) => {
+      (config['skills'] as UnknownRecord[]).push({
+        id: 't_cd',
+        name: '测试冷却',
+        kind: 'active',
+        cost: 0,
+        target: 'single',
+        power: 1,
+        effects: [],
+        cooldown,
+      });
+    });
+  }
+
+  it('cast 后进入冷却，2 回合内不可选，第 3 回合恢复', () => {
+    const repo = cdRepo(2);
+    const engine = BattleEngine.create(
+      setupOf(
+        makeUnit('a0', { stats: { spd: 20 }, skills: [SYNTHETIC_NORMAL, 't_cd'] }),
+        makeUnit('b0'),
+      ),
+      repo,
+    );
+
+    const canUse = () =>
+      engine
+        .availableCommands('a0')
+        .some((cmd) => cmd.type === 'skill' && cmd.skillId === 't_cd');
+
+    engine.submit({ type: 'skill', turn: 1, uid: 'a0', skillId: 't_cd', targetUids: ['b0'] });
+    expect(engine.state.units[0]!.cooldowns).toEqual({ t_cd: 3 });
+
+    engine.submit(normal(engine, 'b0', 'a0'));
+    expect(engine.state.turn).toBe(2);
+    expect(engine.state.units[0]!.cooldowns).toEqual({ t_cd: 2 });
+    expect(canUse()).toBe(false);
+    // 冷却中直接提交也要拒绝（不能只靠 availableCommands）。
+    expect(() =>
+      engine.submit({ type: 'skill', turn: 2, uid: 'a0', skillId: 't_cd', targetUids: ['b0'] }),
+    ).toThrow(/冷却/);
+
+    engine.submit(normal(engine, 'a0', 'b0'));
+    engine.submit(normal(engine, 'b0', 'a0'));
+    expect(engine.state.units[0]!.cooldowns).toEqual({ t_cd: 1 });
+    expect(canUse()).toBe(false);
+
+    engine.submit(normal(engine, 'a0', 'b0'));
+    engine.submit(normal(engine, 'b0', 'a0'));
+    expect(engine.state.units[0]!.cooldowns).toEqual({});
+    expect(canUse()).toBe(true);
+  });
+
+  it('cooldown = 1 只跳过下一回合', () => {
+    const repo = cdRepo(1);
+    const engine = BattleEngine.create(
+      setupOf(
+        makeUnit('a0', { stats: { spd: 20 }, skills: [SYNTHETIC_NORMAL, 't_cd'] }),
+        makeUnit('b0'),
+      ),
+      repo,
+    );
+    engine.submit({ type: 'skill', turn: 1, uid: 'a0', skillId: 't_cd', targetUids: ['b0'] });
+    engine.submit(normal(engine, 'b0', 'a0'));
+    expect(engine.state.units[0]!.cooldowns).toEqual({ t_cd: 1 });
+
+    engine.submit(normal(engine, 'a0', 'b0'));
+    engine.submit(normal(engine, 'b0', 'a0'));
+    expect(engine.state.units[0]!.cooldowns).toEqual({});
+  });
+
+  it('技能没有 cooldown 配置时，单位不带 cooldowns 字段、行为不变', () => {
+    const engine = BattleEngine.create(
+      setupOf(makeUnit('a0', { stats: { spd: 20 } }), makeUnit('b0')),
+      cfg,
+    );
+    engine.submit(normal(engine, 'a0', 'b0'));
+    expect(engine.state.units[0]!.cooldowns).toBeUndefined();
+    expect(engine.state.units[1]!.cooldowns).toBeUndefined();
+  });
+});
