@@ -101,6 +101,11 @@ export interface EconomyCurve {
   totalCoin: number;
   totalFood: number;
   totalGeneDust: number;
+  /** 24h 单次推进产出的金币 / 8h 单次推进产出；≈1 说明离线封顶生效。 */
+  offlineCapRatio: number;
+  offlineCapVerified: boolean;
+  /** 曲线里是否有负值（不应出现）。 */
+  hasNegativeValues: boolean;
 }
 
 export interface GeneSummary {
@@ -122,7 +127,14 @@ export interface BreedingStats {
   species: Record<string, number>;
   element: Record<string, number>;
   overall: BreedingGroup;
+  /** 随机 founder 配对中的近亲比例；founder 互不相关，预期 0。 */
+  randomInbredRate: number;
+  /** 构造出的近亲配对（父 × 亲女）中被 `isInbred` 判定的比例；预期 1。 */
   inbredRate: number;
+  /** 对照组（亲女 × 无关 founder）中被误判为近亲的比例；预期 0。 */
+  controlInbredRate: number;
+  /** 子代 `ancestors` 是否真的带上了父母（否则近亲判定不可能成立）。 */
+  ancestorVerified: boolean;
   inbred: BreedingGroup | null;
   control: BreedingGroup | null;
   invalidNumbers: number;

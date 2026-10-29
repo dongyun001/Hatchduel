@@ -77,7 +77,21 @@ export function unavailableBattle(reason: string): BattleMetrics {
   };
 }
 
-function pickCommand(commands: readonly Command[], cfg: ConfigRepo, rng: Rng): Command {
+/**
+ * 自动战斗策略（模拟“会留能量的玩家”，不是 core 的 PVE AI）：
+ * 1. 能放大招 → 放（power 最高者）；
+ * 2. 否则若“下一回合普攻后”就能放大招 → 普攻攒能量（不交小技能）；
+ * 3. 否则放当前可用的最高 cost 技能。
+ *
+ * 这样大招间隔才落在约 3 回合；若每有 45 能量就放小技能，会永远攒不到 70+。
+ */
+function pickCommand(
+  commands: readonly Command[],
+  cfg: ConfigRepo,
+  rng: Rng,
+  unitSkills: readonly string[],
+  energy: number,
+): Command {
   const skills = commands.filter(
     (command): command is Extract<Command, { type: 'skill' }> => command.type === 'skill',
   );
@@ -87,18 +101,36 @@ function pickCommand(commands: readonly Command[], cfg: ConfigRepo, rng: Rng): C
     return fallback;
   }
 
-  let bestCost = -1;
-  let best: Command[] = [];
-  for (const command of skills) {
-    const cost = cfg.skill(command.skillId).cost;
-    if (cost > bestCost) {
-      bestCost = cost;
-      best = [command];
-    } else if (cost === bestCost) {
-      best.push(command);
+  const input = (command: Extract<Command, { type: 'skill' }>): Command => command;
+  const byCost = (list: readonly Extract<Command, { type: 'skill' }>[]): Command[] => {
+    let bestCost = -1;
+    let best: Command[] = [];
+    for (const command of list) {
+      const cost = cfg.skill(command.skillId).cost;
+      if (cost > bestCost) {
+        bestCost = cost;
+        best = [input(command)];
+      } else if (cost === bestCost) {
+        best.push(input(command));
+      }
     }
+    return best;
+  };
+
+  const ultimates = skills.filter((command) => cfg.skill(command.skillId).cost >= ULTIMATE_SKILL_MIN);
+  if (ultimates.length > 0) return rng.pick(byCost(ultimates));
+
+  const ultimateCosts = unitSkills
+    .map((skillId) => cfg.skill(skillId).cost)
+    .filter((cost) => cost >= ULTIMATE_SKILL_MIN);
+  const cheapestUltimate = ultimateCosts.length > 0 ? Math.min(...ultimateCosts) : Number.POSITIVE_INFINITY;
+
+  if (energy + 30 >= cheapestUltimate) {
+    const normal = skills.find((command) => cfg.skill(command.skillId).kind === 'normal');
+    if (normal) return input(normal);
   }
-  return rng.pick(best);
+
+  return rng.pick(byCost(skills));
 }
 
 function currentActor(order: readonly string[], cursor: number): string | undefined {
@@ -122,7 +154,8 @@ function playOneBattle(
     if (!uid) break;
     const commands = engine.availableCommands(uid);
     if (commands.length === 0) break;
-    engine.submit(pickCommand(commands, cfg, rng));
+    const actor = state.units.find((unit) => unit.uid === uid);
+    engine.submit(pickCommand(commands, cfg, rng, actor?.skills ?? [], actor?.energy ?? 0));
     guard += 1;
   }
 

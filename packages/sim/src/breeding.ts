@@ -46,7 +46,10 @@ export function unavailableBreeding(reason: string): BreedingStats {
     species: {},
     element: {},
     overall: { samples: 0, gene: emptyGene, mutationRate: 0, avgExpressedTraits: 0 },
+    randomInbredRate: 0,
     inbredRate: 0,
+    controlInbredRate: 0,
+    ancestorVerified: false,
     inbred: null,
     control: null,
     invalidNumbers: 0,
@@ -125,13 +128,13 @@ export function runBreedingBatch(
     const children: PetInstance[] = [];
     const species: Record<string, number> = {};
     const element: Record<string, number> = {};
-    let inbredCount = 0;
+    let randomInbredCount = 0;
     let invalidNumbers = 0;
 
     for (let index = 0; index < options.samples; index += 1) {
       const father = rng.pick(males);
       const mother = rng.pick(females);
-      if (isInbred(father, mother, cfg.breeding().inbreeding.generations)) inbredCount += 1;
+      if (isInbred(father, mother, cfg.breeding().inbreeding.generations)) randomInbredCount += 1;
 
       const { child } = breed(father, mother, 0, cfg, rng);
       children.push(child);
@@ -152,6 +155,13 @@ export function runBreedingBatch(
     const childEgg = breed(father, mother, 0, cfg, rng2).child;
     const adultChild = advanceToAdult(cfg, childEgg);
 
+    // 先验证子代祖先确实落库：没有 ancestors，isInbred 永远为 false。
+    const depth = cfg.breeding().inbreeding.generations;
+    const ancestorIds = new Set(adultChild.ancestors.map((ref) => ref.id));
+    const ancestorVerified = ancestorIds.has(father.id) && ancestorIds.has(mother.id);
+    const inbredDetected = isInbred(father, adultChild, depth);
+    const controlDetected = isInbred(adultChild, outsider, depth);
+
     const inbredChildren: PetInstance[] = [];
     const controlChildren: PetInstance[] = [];
     for (let index = 0; index < options.samples; index += 1) {
@@ -161,11 +171,15 @@ export function runBreedingBatch(
 
     return {
       status: 'ok',
+      reason: ancestorVerified ? undefined : '子代 ancestors 未包含父母，近亲判定无法成立',
       samples: options.samples,
       species,
       element,
       overall: summarize(children),
-      inbredRate: round(inbredCount / Math.max(1, options.samples)),
+      randomInbredRate: round(randomInbredCount / Math.max(1, options.samples)),
+      inbredRate: inbredDetected ? 1 : 0,
+      controlInbredRate: controlDetected ? 1 : 0,
+      ancestorVerified,
       inbred: summarize(inbredChildren),
       control: summarize(controlChildren),
       invalidNumbers,

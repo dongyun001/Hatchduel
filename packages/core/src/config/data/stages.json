@@ -4,12 +4,36 @@
     "name": "浅滩试炼",
     "order": 1,
     "enemies": [
-      { "speciesId": "frog", "elementId": "water", "level": 2, "geneQuality": 40, "traits": [] },
-      { "speciesId": "fish", "elementId": "water", "level": 2, "geneQuality": 40, "traits": [] }
+      {
+        "speciesId": "frog",
+        "elementId": "water",
+        "level": 2,
+        "geneQuality": 40,
+        "traits": []
+      },
+      {
+        "speciesId": "fish",
+        "elementId": "water",
+        "level": 2,
+        "geneQuality": 40,
+        "traits": []
+      }
     ],
     "rewards": {
-      "firstClear": { "resources": { "coin": 120, "food": 10, "geneDust": 3 }, "petExp": 40 },
-      "repeat": { "resources": { "coin": 40 }, "petExp": 13 }
+      "firstClear": {
+        "resources": {
+          "coin": 120,
+          "food": 10,
+          "geneDust": 3
+        },
+        "petExp": 40
+      },
+      "repeat": {
+        "resources": {
+          "coin": 40
+        },
+        "petExp": 13
+      }
     }
   },
   {
@@ -17,17 +41,48 @@
     "name": "泥岸冲突",
     "order": 2,
     "enemies": [
-      { "speciesId": "turtle", "elementId": "earth", "level": 4, "geneQuality": 45, "traits": ["trait_sturdy"] },
-      { "speciesId": "frog", "elementId": "grass", "level": 4, "geneQuality": 45, "traits": [] },
-      { "speciesId": "fish", "elementId": "water", "level": 5, "geneQuality": 48, "traits": [] }
+      {
+        "speciesId": "turtle",
+        "elementId": "earth",
+        "level": 3,
+        "geneQuality": 41,
+        "traits": []
+      },
+      {
+        "speciesId": "frog",
+        "elementId": "grass",
+        "level": 3,
+        "geneQuality": 42,
+        "traits": []
+      },
+      {
+        "speciesId": "fish",
+        "elementId": "water",
+        "level": 4,
+        "geneQuality": 44,
+        "traits": []
+      }
     ],
     "rewards": {
       "firstClear": {
-        "pets": [{ "speciesId": "cat", "elementId": "fire" }],
-        "resources": { "coin": 150, "geneDust": 8 },
+        "pets": [
+          {
+            "speciesId": "cat",
+            "elementId": "fire"
+          }
+        ],
+        "resources": {
+          "coin": 150,
+          "geneDust": 8
+        },
         "petExp": 50
       },
-      "repeat": { "resources": { "coin": 50 }, "petExp": 16 }
+      "repeat": {
+        "resources": {
+          "coin": 50
+        },
+        "petExp": 16
+      }
     }
   },
   {
@@ -35,13 +90,45 @@
     "name": "草丛伏击",
     "order": 3,
     "enemies": [
-      { "speciesId": "cat", "elementId": "fire", "level": 5, "geneQuality": 50, "traits": [] },
-      { "speciesId": "snake", "elementId": "earth", "level": 6, "geneQuality": 52, "traits": [] },
-      { "speciesId": "turtle", "elementId": "water", "level": 6, "geneQuality": 54, "traits": ["trait_sturdy"] }
+      {
+        "speciesId": "cat",
+        "elementId": "fire",
+        "level": 5,
+        "geneQuality": 44,
+        "traits": []
+      },
+      {
+        "speciesId": "frog",
+        "elementId": "grass",
+        "level": 5,
+        "geneQuality": 45,
+        "traits": []
+      },
+      {
+        "speciesId": "turtle",
+        "elementId": "water",
+        "level": 6,
+        "geneQuality": 48,
+        "traits": [
+          "trait_sturdy"
+        ]
+      }
     ],
     "rewards": {
-      "firstClear": { "resources": { "coin": 180, "food": 20, "geneDust": 10 }, "petExp": 60 },
-      "repeat": { "resources": { "coin": 60 }, "petExp": 20 }
+      "firstClear": {
+        "resources": {
+          "coin": 180,
+          "food": 20,
+          "geneDust": 10
+        },
+        "petExp": 60
+      },
+      "repeat": {
+        "resources": {
+          "coin": 60
+        },
+        "petExp": 20
+      }
     }
   },
   {
@@ -49,17 +136,50 @@
     "name": "毒牙沼泽",
     "order": 4,
     "enemies": [
-      { "speciesId": "snake", "elementId": "earth", "level": 7, "geneQuality": 56, "traits": [] },
-      { "speciesId": "fish", "elementId": "water", "level": 8, "geneQuality": 58, "traits": ["trait_swift"] },
-      { "speciesId": "frog", "elementId": "grass", "level": 8, "geneQuality": 58, "traits": [] }
+      {
+        "speciesId": "snake",
+        "elementId": "earth",
+        "level": 7,
+        "geneQuality": 50,
+        "traits": []
+      },
+      {
+        "speciesId": "fish",
+        "elementId": "water",
+        "level": 7,
+        "geneQuality": 52,
+        "traits": [
+          "trait_swift"
+        ]
+      },
+      {
+        "speciesId": "frog",
+        "elementId": "grass",
+        "level": 8,
+        "geneQuality": 52,
+        "traits": []
+      }
     ],
     "rewards": {
       "firstClear": {
-        "pets": [{ "speciesId": "snake", "elementId": "earth" }],
-        "resources": { "coin": 220, "geneDust": 12 },
+        "pets": [
+          {
+            "speciesId": "snake",
+            "elementId": "earth"
+          }
+        ],
+        "resources": {
+          "coin": 220,
+          "geneDust": 12
+        },
         "petExp": 70
       },
-      "repeat": { "resources": { "coin": 70 }, "petExp": 23 }
+      "repeat": {
+        "resources": {
+          "coin": 70
+        },
+        "petExp": 23
+      }
     }
   },
   {
@@ -67,13 +187,47 @@
     "name": "雷暴之巅",
     "order": 5,
     "enemies": [
-      { "speciesId": "cat", "elementId": "fire", "level": 10, "geneQuality": 60, "traits": ["trait_lucky"] },
-      { "speciesId": "turtle", "elementId": "earth", "level": 10, "geneQuality": 62, "traits": ["trait_sturdy"] },
-      { "speciesId": "snake", "elementId": "thunder", "level": 11, "geneQuality": 64, "traits": [] }
+      {
+        "speciesId": "turtle",
+        "elementId": "water",
+        "level": 7,
+        "geneQuality": 52,
+        "traits": [
+          "trait_sturdy"
+        ]
+      },
+      {
+        "speciesId": "turtle",
+        "elementId": "earth",
+        "level": 8,
+        "geneQuality": 54,
+        "traits": [
+          "trait_sturdy"
+        ]
+      },
+      {
+        "speciesId": "snake",
+        "elementId": "thunder",
+        "level": 8,
+        "geneQuality": 56,
+        "traits": []
+      }
     ],
     "rewards": {
-      "firstClear": { "resources": { "coin": 300, "geneDust": 20, "food": 30 }, "petExp": 80 },
-      "repeat": { "resources": { "coin": 100 }, "petExp": 26 }
+      "firstClear": {
+        "resources": {
+          "coin": 300,
+          "geneDust": 20,
+          "food": 30
+        },
+        "petExp": 80
+      },
+      "repeat": {
+        "resources": {
+          "coin": 100
+        },
+        "petExp": 26
+      }
     }
   }
 ]
