@@ -20,13 +20,6 @@ COPY tools/package.json tools/
 COPY tests/e2e/package.json tests/e2e/
 RUN pnpm install --frozen-lockfile
 
-# 临时桥：`pg` 还没进 server/package.json（锁文件只由 0 号改）。
-# 装到独立目录并用 NODE_PATH 兜底；0 号加上依赖后删掉这一段即可。
-RUN mkdir -p /opt/petbattle-pg \
-  && cd /opt/petbattle-pg \
-  && npm init -y >/dev/null \
-  && npm install --omit=dev --no-audit --no-fund pg@8.13.1
-ENV NODE_PATH=/opt/petbattle-pg/node_modules
 
 COPY tsconfig.base.json tsconfig.json ./
 COPY packages packages
