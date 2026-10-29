@@ -35,6 +35,9 @@ jobs:
       - name: Validate config
         run: pnpm validate:config
 
+      - name: Client lib sync check
+        run: node client/tools/sync-lib.mjs --check
+
       - name: Server smoke (/health)
         run: |
           pnpm --filter @petbattle/server start &
