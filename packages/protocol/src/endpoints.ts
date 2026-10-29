@@ -22,6 +22,7 @@ import type {
   CollectHabitatRequest,
   CollectHabitatResponse,
   FeedPetRequest,
+  MovePetToHabitatRequest,
   PlayWithPetRequest,
   UpgradeHabitatRequest,
 } from './habitat.js';
@@ -49,6 +50,7 @@ export const ROUTES = {
   cleanPet: { method: 'POST', path: '/habitat/clean' },
   playWithPet: { method: 'POST', path: '/habitat/play' },
   upgradeHabitat: { method: 'POST', path: '/habitat/upgrade' },
+  movePetToHabitat: { method: 'POST', path: '/habitat/move' },
 
   renamePet: { method: 'POST', path: '/pets/:id/rename' },
   setPetLock: { method: 'POST', path: '/pets/:id/lock' },
@@ -94,6 +96,7 @@ export interface ApiContract {
   cleanPet: { request: CleanPetRequest; response: ProfileWriteResponse };
   playWithPet: { request: PlayWithPetRequest; response: ProfileWriteResponse };
   upgradeHabitat: { request: UpgradeHabitatRequest; response: ProfileWriteResponse };
+  movePetToHabitat: { request: MovePetToHabitatRequest; response: ProfileWriteResponse };
 
   renamePet: { request: RenamePetRequest; response: ProfileWriteResponse };
   setPetLock: { request: SetPetLockRequest; response: ProfileWriteResponse };
@@ -134,6 +137,7 @@ export const WRITE_ROUTE_KEYS = [
   'cleanPet',
   'playWithPet',
   'upgradeHabitat',
+  'movePetToHabitat',
   'renamePet',
   'setPetLock',
   'releasePet',

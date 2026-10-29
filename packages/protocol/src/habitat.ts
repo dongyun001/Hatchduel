@@ -27,3 +27,14 @@ export interface PlayWithPetRequest {
 export interface UpgradeHabitatRequest {
   habitatId: HabitatId;
 }
+
+/**
+ * 放入/移出栖息地。`habitatId = null` 表示移出。
+ *
+ * 放生要求宠物不在栖息地中（DOMAIN §8.6），所以必须有这个入口把宠物移出；
+ * 容量、归属、非蛋、槽位去重由服务端与 core 校验。
+ */
+export interface MovePetToHabitatRequest {
+  petId: PetId;
+  habitatId: HabitatId | null;
+}

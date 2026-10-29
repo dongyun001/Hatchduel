@@ -112,7 +112,7 @@ interface ApiResponse<T> {
 
 只增不改；文案由客户端按 code 本地化，服务端 message 只用于日志。
 
-### 4.3 端点（`src/endpoints.ts`，28 条，其中 23 条写路由）
+### 4.3 端点（`src/endpoints.ts`，29 条，其中 24 条写路由）
 
 | 路由 key | 方法 | 路径 | 请求 → 响应 |
 |---|---|---|---|
@@ -129,6 +129,7 @@ interface ApiResponse<T> {
 | cleanPet | POST | `/habitat/clean` | `CleanPetRequest` → `ProfileWriteResponse` |
 | playWithPet | POST | `/habitat/play` | `PlayWithPetRequest` → `ProfileWriteResponse` |
 | upgradeHabitat | POST | `/habitat/upgrade` | `UpgradeHabitatRequest` → `ProfileWriteResponse` |
+| movePetToHabitat | POST | `/habitat/move` | `MovePetToHabitatRequest` → `ProfileWriteResponse`（v1.3） |
 | renamePet | POST | `/pets/:id/rename` | `RenamePetRequest` → `ProfileWriteResponse` |
 | setPetLock | POST | `/pets/:id/lock` | `SetPetLockRequest` → `ProfileWriteResponse` |
 | releasePet | POST | `/pets/:id/release` | — → `ReleasePetResponse` |
@@ -156,6 +157,7 @@ interface ApiResponse<T> {
 | 新增可选字段 / 新端点 | 兼容；`contract-v1.x`，`PROTOCOL_VERSION` 仍为 `v1` |
 
 - **contract-v1.1（2026-10-29）**：新增 `BASE_REVISION_HEADER` 常量（C 实现 `/profile/rename` 时需要的写操作头）。兼容变更，端点与 DTO 不变。
+- **contract-v1.3（2026-10-29）**：新增 `POST /habitat/move`（放入/移出栖息地），解决“初始宠在栖息地内 → 无法放生”的死路；兼容变更。
 | 删除/重命名字段、改语义、改必填性 | 不兼容；升 `v2`，新建 `docs/CONTRACT-v2.md`，双版本过渡 |
 | 错误码新增 | 兼容；只增不改 |
 
@@ -289,6 +291,19 @@ A 首批完成后提了 4 条变更请求和 3 条待明确项。裁定如下；
 | D-05 | 食物不足的额外饥饿惩罚缺系数 | **`HabitatConfig.hungerPenaltyWhenNoFoodPerHour?: number`**（可选，缺省 0）；A 加 schema 字段与结算，D 填数值 | A 改 schema/结算；D 补数据 |
 | D-06 | 产出阶段系数 0.5/1/0.8 写死在代码 | **`HabitatConfig.productionStageMul?: { juvenile; adult; elder }`**（可选，缺省 0.5/1/0.8）；A 改为读配置，D 填数值 | A 改实现；D 补数据 |
 | D-07 | `createPet` 与升级经验 | `createPet` **本批必做**；新增 `applyExp(pet, amount, cfg)`（按 `expToNext` 循环升级，≤20 级） | A 实现 + 测试 |
+
+### 7.2 D/C 第二批反馈的裁定（contract-v1.3，2026-10-29）
+
+| 编号 | 议题 | 裁定 | 落地 |
+|---|---|---|---|
+| D-08 | A 的测试写死 `normal_strike` power、`stage_1` 敌人数量与固定快照，锁住 D 调水/土系 | **测试与生产数据解耦**：battle/determinism 用 `test/factory` 的合成配置；删除“stage_1 恰好 2 个敌人”的断言；D-05 用例显式 `delete` 字段 | A 改测试 |
+| D-09 | `autoCommand` 45 能量就交小技能，几乎攒不到大招 | 留能量策略：`energy >= 大招cost` 放大招；`energy >= 大招cost-20` 普攻攒能量；否则再考虑小技能；加“自动战斗能看到大招”的回归测试 | A 改引擎 |
+| D-10 | PvE 只有单边 setup 入口 | 新增 `buildPveBattleSetup(party, stage, cfg, seed): BattleSetup`，team0=party、team1=`buildEnemyTeam` | A 实现；C 接 `/battle/pve/start` |
+| D-11 | 放行防守阵容中的宠物放生会留下悬空 id | `releasePet` 检查 `profile.pvp.defense`，命中抛 `ReleaseError('in_defense')` → `PET_IN_USE` | A + C |
+| D-12 | 栖息地操作没有 core 函数，C 无法实现 `/habitat/*` | 新增 `movePetToHabitat` / `feedPet` / `cleanPet` / `playWithPet` / `upgradeHabitat` / `collectHabitat`，统一返回 `{ profile, patch }`；`clean/play` 恢复量进 `HabitatConfig.careRecoveryPerAction?`（可选，默认 hygiene +20 / mood +20）；**新增 `POST /habitat/move`** | A 实现 + C 接端点（协议已由 0 号加好） |
+| D-13 | `hit` 用乘数语义（有符号值 × 1.05）不合理 | `statMods` 中 hp/atk/def/spd/crit/critDmg/dodge 仍是乘数；`hit` 改为**加法增量**（如 +0.02）；`deriveStats` 与文档同步 | A 改实现 |
+| D-14 | `inheritance.weight` 未被消费 | MVP 标记为 **reserved**，保留字段不删；文档写明暂不参与遗传，等显性/隐性模型确定后再用 | A 补文档 |
+| D-15 | 宠物名 12 字符是服务端暂定值 | 保持 12（中文 12 字足够，UI 可自行更短）；不改协议 | 无代码改动 |
 
 > D-05/D-06 的字段是**可选**的，避免 D 还没填数据时阻断 A；但两者都必须从配置读取，不允许 A 再写死第二套默认值。
 
@@ -447,3 +462,4 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | contract-v1 | 2026-10-28 | 首次冻结：workspace/CI、protocol v1、core 公共契约、配置 schema 与样例、server Hello、接手点与变更流程 |
 | contract-v1.1 | 2026-10-29 | 兼容补充：`BASE_REVISION_HEADER`；记录 M1 首批集成结果与 `createPet` 缺口 |
 | contract-v1.2 | 2026-10-29 | core 签名集中调整（D-01~D-07）：`releasePet` 加 cfg、`BreedResult.parentCooldowns`、`BattleEngine.autoCommand`、`applyExp`、栖息地两个可选配置字段；协议不变 |
+| contract-v1.3 | 2026-10-29 | 解除 D/C 阻塞（D-08~D-15）：测试解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 `/habitat/move` 端点、`hit` 修正 |

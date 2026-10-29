@@ -511,6 +511,32 @@
 
 ---
 
+## 2.5 2026-10-29 D/C 第二批反馈
+
+### P-047 patch 里同一个 id 既 upsert 又 remove
+
+- **日期**：2026-10-29
+- **发现者/会话**：C 服务端
+- **范围**：server / core
+- **现象**：一次放生写操作里，`advanceProfile` 产出的 patch 会 upsert 该宠物（时间/状态变化），端点逻辑又把它 remove。合并时若 upsert 覆盖 remove，客户端会重新出现已放生的宠物。
+- **原因**：增量 patch 的两份来源（时间推进、端点改动）没有约定冲突优先级。
+- **规避**：`composePatch` 中 **remove 优先于 upsert**；同一 id 出现在两边时删除生效。补单测锁定。
+- **验证**：`server/test/domain.test.ts` 有 upsert+remove 同 id 用例；放生后客户端不再显示该宠物。
+- **关联**：`server/src/domain/patch.ts`、`docs/CONTRACT.md` §4.1。
+
+### P-048 宠物在栖息地里，却没有“移出”入口，导致无法放生
+
+- **日期**：2026-10-29
+- **发现者/会话**：C 服务端（联调时）
+- **范围**：protocol / core / server
+- **现象**：初始 3 只宠物都放进栖息地槽位；`releasePet` 按 DOMAIN §8.6 拒绝 `in_habitat`，但 ONLINE_DESIGN 的端点表只有喂食/清理/玩耍/升级，没有“放入/移出栖息地”。玩家无法把宠物移出，也就永远放生不了。
+- **原因**：端点按“日常照料动作”设计，漏了槽位管理；规则和入口没有对齐。
+- **规避**：新增 `POST /habitat/move`（`petId` + `habitatId | null`）与 core `movePetToHabitat`；容量/归属/非蛋/去重由 core 校验。见 contract-v1.3 D-12。
+- **验证**：E2E：初始档 → move 移出 → release 成功；容量满、重复槽位、非本人宠物被拒绝。
+- **关联**：`docs/CONTRACT.md` §7.2 D-12、`docs/ONLINE_DESIGN.md` §5.2、`DOMAIN_MODEL.md` §8.6。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -593,3 +619,4 @@
 | v1.2 | 2026-10-28 | 追加 P-038~P-041（M0 契约冻结补记：配置序列化、类型单一来源、NodeNext 扩展名、exports 指向源码） |
 | v1.3 | 2026-10-29 | 追加 P-042/P-043（M1 首批集成：测试写死配置数值、strict 降级漏判） |
 | v1.4 | 2026-10-29 | 追加 P-044~P-046（A 首批实现反馈：比例属性取整、状态衰减归属、契约缺落库出口） |
+| v1.5 | 2026-10-29 | 追加 P-047/P-048（D/C 第二批：patch 同 id 冲突、栖息地无移出入口） |

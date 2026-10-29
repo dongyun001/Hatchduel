@@ -17,9 +17,9 @@
 
 | 会话 | 状态 | 下一步 |
 |---|---|---|
-| A | **第二批已完成并合入 main**（createPet/applyExp + v1.2） | 等 D 的平衡反馈；下一批可做 A 报告里列出的剩余项 |
-| D | 首批已完成，第二批待做 | 按 §3：分关平衡 + 补栖息地字段 + 修近亲对照 |
-| C | 首批已完成，第二批待做 | 按 §2：真实初始档 + 宠物 rename/lock/release + 编队 |
+| A | 第二批已完成；**第三批待做**（v1.3：测试解耦 + 栖息地函数 + PvE setup） | 按 §6；解 D/C 阻塞 |
+| D | 第二批已完成并合入（分关平衡/近亲修复/栖息地字段） | 等 A 测试解耦后调水/土系；用真实路径复跑 |
+| C | 第二批已完成并合入（初始档/宠物操作/编队） | **等 A 第三批**，然后按 §2 接栖息地端点与放生闭环 |
 | B | **Cocos Creator 3.8.8 已装**（`C:\ProgramData\cocos\editors\Creator.8.8`） | 按 §4 开工 |
 | E | 暂停 | 美术不参与本轮 |
 
@@ -82,61 +82,48 @@
 
 ---
 
-## 2. C —— 服务端（第二批：初始档 + 宠物操作）
+## 2. C —— 服务端（第三批：栖息地操作）
 
-工作目录：`D:\github-mine\petbattle-server`（分支 `wt/server`）。开工前先 `git merge main`（当前 `main` 为 `contract-v1.2`，core 已无桩）。
+工作目录：`D:\github-mine\petbattle-server`（分支 `wt/server`）。**前置：A 第三批已合并**（core 有 `movePetToHabitat`/`feedPet`/`cleanPet`/`playWithPet`/`upgradeHabitat`/`collectHabitat`，protocol 已有 `/habitat/move`）。先 `git merge main` 并确认这些导出存在；没有就先做不依赖它们的部分并报告。
 
 ```
-你继续负责 PetBattle 的 C 服务端会话，做第二批。
+你继续负责 PetBattle 的 C 服务端会话，做第三批：栖息地与放生闭环。
 
 工作目录：D:\github-mine\petbattle-server（分支 wt/server）。
-开工前先 git merge main（当前 main d57c66d / contract-v1.2，core 已无桩）。
+开工前先 git merge main（contract-v1.3；A 第三批应已合入）。先确认 @petbattle/core 导出：
+movePetToHabitat / feedPet / cleanPet / playWithPet / upgradeHabitat / collectHabitat，
+以及 ROUTES.movePetToHabitat。缺任何一个就先报告，不要自己实现领域规则。
 只改：server/**、docs/ONLINE_DESIGN.md。
-不要改：packages/**、client/**、tools/**、根配置、packages/protocol/**、docs/CONTRACT.md。
+不要改：packages/**、client/**、tools/**、根配置、docs/CONTRACT.md。
 
-先读：
-- docs/CONTRACT.md §4（协议）、§7.1（v1.2 签名）、§8.3、§9
-- docs/ONLINE_DESIGN.md §4/§5
-- server/src/domain/{starter-profile,core-adapter,config-provider}.ts
-- packages/core/src/api.ts（createPet / releasePet / advanceProfile / applyExp 签名）
-- docs/PITFALLS.md P-029、P-042、P-043、P-046
-
-本批目标：新账号有真实初始档；接宠物基础操作与编队；放生按 v1.2 签名。
+先读：docs/CONTRACT.md §4.3/§7.2（D-12/D-11）、docs/ONLINE_DESIGN.md §5.2、
+server/src/domain/{starter-profile,core-adapter,patch}.ts、packages/core/src/api.ts。
 
 任务：
-1. 初始档（server/src/domain/starter-profile.ts）：
-   - 用 @petbattle/core 的 createPet 创建 3 只：水龟(turtle/water)、雷鱼(fish/thunder)、草蛙(frog/grass)；
-     基因四项 50、traits 空、generation 1、parents [null,null]。
-   - 性别固定 [male, female, male]，保证 1 公 1 母。
-   - createPet 的 now 传 `now - breeding.hatchMs - breeding.juvenileMs`，再对整档调用
-     advanceProfile(profile, now, repo)，断言三只 stage==='adult'、fertility.readyAt<=now。
-     不要在 server 里手写阶段/属性规则。
-   - currencies 用 economy.startingResources；栖息地 meadow 1 级，slots 放 3 只（第 4 格 null），
-     每只 habitatId 指向它；codex 对 3 个组合写 seen/owned、bestGene=50；
-     lineup/defense 空；revision 0，createdAt/lastEvaluatedAt=now（首次登录无离线收益）。
-   - 测试：3 只、1 公 1 母、全成年、可繁殖、栖息地槽位、codex、幂等（同 device 重复登录不重复建宠）。
-2. 宠物端点：
-   - POST /pets/:id/rename：校验归属/长度；返回 patch。
-   - POST /pets/:id/lock：locked 切换。
-   - POST /pets/:id/release：调用 core releasePet(profile, petId, now, cfg)；
-     把 ReleaseError.reason 映射到协议错误码（EGG_NOT_RELEASABLE / PET_LOCKED / PET_IN_USE / LAST_ADULT 等）；
-     返还写回 currencies；图鉴 owned 不回退；写审计日志。
-3. POST /lineup/set：最多 3、属于本人、非蛋、引用存在、去重；与 pvp/defense 不联动；
-   幼年可上阵（属性由战斗时 deriveStats 处理，不在编队接口算）。
-4. 生产默认：docker-compose 设 PETBATTLE_CORE_STUB=strict；本地 memory 模式可显式放宽。
-5. 测试：初始档、rename/lock/release（含四类拒绝与返还）、lineup 校验、revision/幂等/401 回归。
-6. 更新 docs/ONLINE_DESIGN.md §16 的端点列表与初始档说明。
+1. POST /habitat/move（新端点）：调用 core movePetToHabitat(profile, petId, habitatId|null, now, cfg)；
+   返回 patch；校验容量/归属/非蛋/槽位去重由 core 负责，服务端只做参数与 revision/幂等。
+2. POST /habitat/collect：调用 core collectHabitat，把 stored 转入 currencies；返回 collected。
+3. POST /habitat/feed、/clean、/play、/upgrade：分别调用对应 core 函数；
+   - 食物不足/资源不足映射 INSUFFICIENT_RESOURCES；
+   - 容量满映射 CAPACITY_FULL；等级上限映射 VALIDATION_FAILED；
+   - 统一走既有写流水线（advanceProfile → 端点改动 → revision CAS → patch）。
+4. 放生闭环：初始 3 只在栖息地中；新增 move 后：
+   测试“初始档 → move 移出 → release 成功”，并覆盖 release 的 in_habitat / in_lineup /
+   in_defense（A 第三批新增）→ PET_IN_USE 映射。
+5. Postgres 端到端测试改用真实接口，不再手工改 profiles.data：
+   guest 登录 → move 移出 → release → 重启后 GET /profile 少一只、codex owned 不回退。
+6. 生产默认 strict 保持；更新 docs/ONLINE_DESIGN.md §16 端点表与流水线说明。
 
 专项验收：
 - pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config 通过。
-- server 在真实 core 下不再降级（日志无“降级”）；guest 登录后 GET /profile 有三只成年宠。
-- Postgres 路径仍可用（本地 docker 起 Postgres，跑一次登录 + 放生）。
-- 不放行“客户端提交结果”；不复制 core 规则；所有写操作幂等 + X-Base-Revision。
+- 内存 + Postgres 各跑一次“登录 → 移出 → 放生 → 重启读档”链路。
+- 所有写操作带 Idempotency-Key + X-Base-Revision；重复请求返回同一结果。
+- 不改 core 规则；缺函数按 CONTRACT §9.3 提请求。
 
-不要做：栖息地喂食/清理/玩耍/升级、繁殖、战斗、PvP 端点——这些还缺 core 公共函数
-（feed/clean/play 的领域函数没有）；需要推进时按 docs/CONTRACT.md §9.3 提请求，不要自己实现规则。
+不要做：繁殖、战斗/PvE、PvP 端点（breeding 编排与 battle session 还没定）；
+`/battle/pve/start` 等 A 的 buildPveBattleSetup 合并后再接。
 
-汇报 AGENTS.md §7，额外列出：本批用到的 core 函数、剩余端点还缺哪些 core API、是否需要 A 补函数。
+汇报 AGENTS.md §7，额外列出：本批用到的 core 函数、剩余端点缺口、Postgres 验证结果。
 ```
 
 ## 3. D —— 内容与数值（第二批：平衡 + 新字段）
@@ -264,63 +251,55 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 
 ---
 
-## 6. A 第二批任务（contract-v1.2，已完成留档）
+## 6. A 第三批任务（contract-v1.3：解 D/C 阻塞）
 
-工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开工前先 `git merge main`。
+工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开工前先 `git merge main`（contract-v1.3；`/habitat/move` 已在 protocol 中）。
 
 ```
-你继续负责 PetBattle 的 A 核心领域会话，做第二批。
+你继续负责 PetBattle 的 A 核心领域会话，做第三批：解 D/C 的阻塞，并把测试与生产数据解耦。
 
-工作目录：D:\github-mine\petbattle-core（分支 wt/core）。
-开工前先 git merge main；本批按 contract-v1.2 裁定执行，权威说明见 docs/CONTRACT.md §7.1（D-01~D-07）。
-
+工作目录：D:\github-mine\petbattle-core（分支 wt/core）。开工前先 git merge main（contract-v1.3）。
 只改：packages/core/src/**（除 config/data/**）、packages/core/test/**、docs/DOMAIN_MODEL.md。
-不要改：packages/core/src/config/data/**（D 的）、packages/protocol/**、server/**、client/**、
-        根配置、docs/CONTRACT.md、docs/PITFALLS.md。
+不要改：config/data/**、packages/protocol/**（/habitat/move 已由 0 号加好）、server/**、client/**、
+        根配置、docs/CONTRACT.md。
 
-一、已批准的契约调整（必须落地，不要再提请求）
-1. releasePet(profile, petId, now, cfg: ConfigRepo)：cfg 必填；返还按 economy.releaseRefund
-   的 base/perLevel/perGeneSumDivisor/rarityBonus 全量计算，不允许再用稀有加成 0 兜底。
-2. BreedResult 增加 parentCooldowns: [EpochMs, EpochMs]：普通 cooldownMs；近亲 ×(1+penalty)；
-   老年 ×2；两者相乘。服务端直接落库，不再自己推口径。
-3. BattleEngine 增加 autoCommand(uid: string): Command：与内置确定性 AI 同一份策略，禁止复制第二套。
-4. 新增导出 applyExp(pet: PetInstance, amount: number, cfg: ConfigRepo): PetInstance：
-   exp += amount；while (exp >= expToNext(level) && level < 20) { exp -= expToNext(level); level++ }；
-   返回新个体。不处理 stageProgress/首通奖励（那属于服务端结算）。
-5. HabitatConfig 增加两个可选字段（schema + types）：
-   hungerPenaltyWhenNoFoodPerHour?: number；productionStageMul?: { juvenile: number; adult: number; elder: number }。
-   - advanceHabitat 食物不足时按前者额外扣 hunger，缺省 0；
-   - 产出阶段系数读后者，缺省 0.5 / 1 / 0.8（DOMAIN §6.1）；不要在代码里再写第二套常量。
-   - 不修改 config/data/**；D 会补样例值。
-6. critDmg × condMul：保留现实现，不改代码；在 docs/DOMAIN_MODEL.md §4 补一句
-   “150% 是基础倍率，状态/特质/被动可修正”，并注明这是 v1.2 裁定（D-04）。
+任务按优先级：
+1. 测试与生产数据解耦（D-08，先做，解 D 的锁）：
+   - advance.test 的 D-05 用例显式 `delete habitat.hungerPenaltyWhenNoFoodPerHour`，不要依赖示例配置缺失；
+   - battle.test 不再写死 normal_strike power=1.0 的 360/190/570/475：用 test/factory 构造合成配置
+     （固定数值的最小 ConfigRepo），伤害断言基于合成配置；
+   - determinism.test 的固定快照改用合成配置，不再锁 stage_1 / water / earth / fish_tide；
+   - 删除“stage_1 恰好 2 个敌人”的断言（允许 2~3）。
+   验收：D 修改 water/earth/fish_tide 与 stage_1 敌人数量时，core 测试不受影响。
+2. autoCommand 留能量（D-09）：energy >= 大招 cost 放大招；energy >= 大招 cost - 20 普攻攒能量；
+   否则 energy >= 小技能 cost 放小技能；否则普攻。加回归测试：自动战斗在可放大招后 1 回合内放大招，
+   且不会因为放小技能把大招无限推后。
+3. 栖息地操作函数（D-12，新增导出，统一返回 { profile, patch }，patch 的 revision 保持输入值）：
+   - movePetToHabitat(profile, petId, habitatId | null, now, cfg)
+   - feedPet(profile, petId, foodId, now, cfg)
+   - cleanPet(profile, petId, now, cfg)
+   - playWithPet(profile, petId, now, cfg)
+   - upgradeHabitat(profile, habitatId, now, cfg)
+   - collectHabitat(profile, habitatId, now, cfg)
+   校验：宠物归属/非蛋/容量/槽位去重/成本/等级上限；feed 扣食物并按 FoodConfig 恢复 hunger/mood；
+   clean/play 恢复量读 HabitatConfig.careRecoveryPerAction?（新增可选字段，默认 hygiene +20 / mood +20）；
+   upgrade 扣 coin/geneDust 并按 levels 扩容量、重算 slots；collect 把 stored 转入 currencies。
+   测试：容量满、重复槽位、非本人、蛋、资源不足、升级扩容、collect 后 stored 清零、patch 正确。
+4. PvE 单边 setup（D-10）：新增
+   buildPveBattleSetup(party: readonly PetInstance[], stage: StageConfig, cfg, seed): BattleSetup，
+   team0 = party（uid a*），team1 = buildEnemyTeam（uid b*）；同 seed 确定性。
+5. 放生拒绝防守阵容（D-11）：releasePet 检查 profile.pvp.defense，命中抛 ReleaseError('in_defense')；
+   同步 ReleaseErrorReason。测试：防守中的宠物被拒绝，移出后可放生。
+6. hit 的 statMods 语义（D-13）：hp/atk/def/spd/crit/critDmg/dodge 仍是乘数；hit 改为加法增量；
+   deriveStats 与 DOMAIN 文档同步，加测试。
+7. inheritance.weight（D-14）：MVP 暂不消费，在 DOMAIN 标注 reserved，不删字段。
+8. 门槛：pnpm typecheck && pnpm test && pnpm lint；pnpm test:coverage core 行覆盖率 ≥85%；
+   同 (setup, seed, commands) 双跑事件流一致。
 
-二、本批任务（按顺序，每步补测试）
-1. createPet：按 DOMAIN §3/§5.1/§8.2 实现。校验 species/element 存在、level 1~20、基因 0~100 取整；
-   stage='egg'，stageChangedAt=bornAt=now；fertility.readyAt=now+hatchMs+juvenileMs，
-   cooldownUntil=0，penalty 取入参默认 0；condition 全 100；traits/hiddenTraits 去重；
-   parents 缺省 [null,null]，ancestors 缺省 []。
-   测试：正常建体、未知物种/属性、等级与基因边界、readyAt、蛋阶段。
-2. applyExp：公式与 20 级封顶；测试 1→2、一次跨多级、满级溢出、0 经验。
-3. D-01~D-03 的签名/返回值调整，更新所有受影响测试；contract.test.ts 里 createPet 的桩用例删除。
-   若所有函数都已实现，contract.test.ts 只保留常量断言。
-4. D-05/D-06：schema/types + 结算实现；测试“未配置时 = 0 / 0.5,1,0.8”和“配置后生效”。
-5. 更新 docs/DOMAIN_MODEL.md：实现说明、critDmg 措辞、D-05/D-06 字段与默认值。
-6. 每完成一项跑 pnpm typecheck && pnpm test && pnpm lint；结束跑 pnpm test:coverage，
-   packages/core/src 行覆盖率 ≥85%（当前 99.27%，不要明显回退）。
-7. 确定性：同 (setup, seed, commands) 事件流逐条一致；签名变化导致快照重建时，必须在报告里单独说明。
+不要做：繁殖编排（startBreeding/cost 扣费）、战斗 session 落库、PvP 编排——这些等 D 的数值与 C 的服务端流程稳定后再做；
+本次只做上面列出的公共函数，不新增其他导出。
 
-三、禁止
-- 不改 config/data/**、protocol、server、client、根配置、CONTRACT.md；
-- 不新增未批准的公共导出；
-- 不自己合并 main、不推送。
-
-四、汇报（AGENTS.md §7），额外回答：
-- 是否重建了确定性快照，为什么；
-- D 需要补哪些配置字段（名称、建议值、影响）；
-- C 接线需要注意的签名变化（releasePet / breed / BattleEngine / applyExp）。
-
-完成后我（0 号）会跑 integration 并合并；D 的批量 sim 和 C 的初始档都在等这一批。
+汇报 AGENTS.md §7，额外列出：新增导出清单、D 需要重跑的 sim、C 可接的端点、是否有破坏性变化。
 ```
 
 ## 7. 变更记录
@@ -333,3 +312,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 | v1.3 | 2026-10-29 | 确认 Cocos Creator 3.8.8 安装路径；B 可开工 |
 | v1.4 | 2026-10-29 | A 第二批完成并合入；D/C 解锁；记录 sim 初版结果 |
 | v1.5 | 2026-10-29 | §2/§3 替换为 C/D 第二批提示词（初始档+宠物操作 / 分关平衡+新字段） |
+| v1.6 | 2026-10-29 | C/D 第二批合并；§2/§6 替换为 C 第三批与 A 第三批提示词（contract-v1.3） |
