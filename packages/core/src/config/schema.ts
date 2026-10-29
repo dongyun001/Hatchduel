@@ -575,6 +575,18 @@ function validateHabitats(c: Collector, value: unknown, ids: Set<string>): void 
     readInt(c, item, 'capacity', p, 1);
     readInt(c, item, 'healthDecayWhenStarving', p, 0);
     readInt(c, item, 'healthRecoveryPerHour', p, 0);
+    // contract-v1.2 D-05/D-06：可选字段，缺省时按 DOMAIN §6.1 的默认值结算。
+    readOptionalNumber(c, item, 'hungerPenaltyWhenNoFoodPerHour', p, 0);
+    const stageMul = item['productionStageMul'];
+    if (stageMul !== undefined) {
+      if (!isRecord(stageMul)) {
+        c.add(join(p, 'productionStageMul'), 'invalid_type', 'productionStageMul 需要对象');
+      } else {
+        for (const key of ['juvenile', 'adult', 'elder'] as const) {
+          readNumber(c, stageMul, key, join(p, 'productionStageMul'), 0);
+        }
+      }
+    }
     readInt(c, item, 'offlineCapMs', p, 1);
     readInt(c, item, 'decayCapMs', p, 1);
 

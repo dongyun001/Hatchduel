@@ -4,30 +4,45 @@
  * 五类拒绝：蛋 / 锁定 / 上阵 / 栖息地中 / 最后一只成年（成年或老年）。
  * 放生返还基因尘；图鉴 `owned` 不回退；宠物不死亡。
  *
- * 注意：契约签名 `releasePet(profile, petId, now)` 不带 `ConfigRepo`，
- * 因此返还公式暂用 DOMAIN §8.6 的字面参数（base 5 / 每级 2 / 基因和 ÷10），
- * 稀有特质加成拿不到 `TraitConfig.rarity`，按 0 计；待契约补 `cfg` 或 economy 入参。
+ * `releasePet(profile, petId, now, cfg)`（contract-v1.2 D-01）：返还按
+ * `economy.releaseRefund` 全量计算（base / perLevel / perGeneSumDivisor / rarityBonus）。
  */
 import { ReleaseError } from './errors.js';
+import type { ConfigRepo } from './config/types.js';
 import type { PetId, PetInstance } from './types/pet.js';
 import type { Profile } from './types/profile.js';
-import type { EpochMs } from './types/common.js';
+import type { EpochMs, Id } from './types/common.js';
 import type { ReleaseResult } from './api.js';
 
-/** DOMAIN §8.6 初版公式参数；与 data/economy.json 的 releaseRefund 对齐。 */
-const RELEASE_REFUND = {
-  base: 5,
-  perLevel: 2,
-  perGeneSumDivisor: 10,
-} as const;
+/** 已表达特质的稀有度加成；配置里已删除的特质按 0 计（旧档兼容）。 */
+function traitRarityBonus(
+  pet: PetInstance,
+  cfg: ConfigRepo,
+  rarityBonus: Record<'common' | 'rare' | 'epic', number>,
+): number {
+  const rarityOf = new Map<Id, 'common' | 'rare' | 'epic'>();
+  for (const trait of cfg.allTraits()) rarityOf.set(trait.id, trait.rarity);
 
-function releaseValue(pet: PetInstance): number {
+  let bonus = 0;
+  for (const traitId of pet.traits) {
+    const rarity = rarityOf.get(traitId);
+    if (rarity) bonus += rarityBonus[rarity];
+  }
+  return bonus;
+}
+
+function releaseValue(pet: PetInstance, cfg: ConfigRepo): number {
+  const refund = cfg.economy().releaseRefund;
   const geneSum =
     pet.genome.stats.hp +
     pet.genome.stats.atk +
     pet.genome.stats.def +
     pet.genome.stats.spd;
-  const raw = RELEASE_REFUND.base + pet.level * RELEASE_REFUND.perLevel + geneSum / RELEASE_REFUND.perGeneSumDivisor;
+  const raw =
+    refund.base +
+    pet.level * refund.perLevel +
+    geneSum / refund.perGeneSumDivisor +
+    traitRarityBonus(pet, cfg, refund.rarityBonus);
   return Math.max(1, Math.floor(raw));
 }
 
@@ -43,6 +58,7 @@ export function releasePetImpl(
   profile: Profile,
   petId: PetId,
   _now: EpochMs,
+  cfg: ConfigRepo,
 ): ReleaseResult {
   const pet = profile.pets[petId];
   if (!pet) throw new ReleaseError('pet_not_found');
@@ -59,7 +75,7 @@ export function releasePetImpl(
     throw new ReleaseError('last_adult');
   }
 
-  const refund = { geneDust: releaseValue(pet) };
+  const refund = { geneDust: releaseValue(pet, cfg) };
   const pets: Profile['pets'] = { ...profile.pets };
   delete pets[petId];
 

@@ -651,3 +651,20 @@ export function chooseAiCommandImpl(ctx: BattleContext): Command | null {
   // 全部被动/纯功能技能都不可用时，普攻永远可用；兜底取第一条指令。
   return commands[0] ?? null;
 }
+
+/**
+ * 内置 AI 的公开入口（contract-v1.2 D-03）：只对当前行动者生效，
+ * 策略与 `chooseAiCommandImpl` 完全相同（同一份实现，不复制第二套）。
+ */
+export function autoCommandImpl(ctx: BattleContext, uid: string): Command {
+  if (ctx.state.phase !== 'ongoing') {
+    throw new Error('@petbattle/core: 战斗已结束，没有可用指令');
+  }
+  const actor = ctx.state.order[ctx.state.cursor];
+  if (actor !== uid) {
+    throw new Error(`@petbattle/core: 还没轮到 "${uid}"（当前 "${actor ?? '-'}"）`);
+  }
+  const command = chooseAiCommandImpl(ctx);
+  if (!command) throw new Error(`@petbattle/core: "${uid}" 没有可用指令`);
+  return command;
+}

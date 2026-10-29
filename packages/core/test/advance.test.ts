@@ -251,3 +251,63 @@ describe('advanceProfile：顺序 / 衰减 / 幂等（DOMAIN §5.2/§7）', () =
     expect(JSON.stringify(profile)).toBe(before);
   });
 });
+
+describe('advanceHabitat：contract-v1.2 D-05/D-06 配置字段', () => {
+  const withStageMul = makeRepo((config) => {
+    habitatRow(config, 'meadow')['productionStageMul'] = { juvenile: 0.6, adult: 1.2, elder: 0.3 };
+  });
+
+  it('配置 productionStageMul 后按配置结算', () => {
+    const adult = makePet({ id: 'a', habitatId: 'meadow' });
+    const juvenile = makePet({ id: 'j', stage: 'juvenile', habitatId: 'meadow' });
+    const elder = makePet({ id: 'e', stage: 'elder', habitatId: 'meadow' });
+
+    expect(
+      advanceHabitat(habitatAt({ slots: ['a'] }), [adult], T0 + HOUR, withStageMul).produced.coin,
+    ).toBe(Math.floor(12 * 1.15 * 1.2));
+    expect(
+      advanceHabitat(habitatAt({ slots: ['j'] }), [juvenile], T0 + HOUR, withStageMul).produced
+        .coin,
+    ).toBe(Math.floor(12 * 1.15 * 0.6));
+    expect(
+      advanceHabitat(habitatAt({ slots: ['e'] }), [elder], T0 + HOUR, withStageMul).produced.coin,
+    ).toBe(Math.floor(12 * 1.15 * 0.3));
+  });
+
+  const noFood = (penalty: number | null) =>
+    makeRepo((config) => {
+      habitatRow(config, 'meadow')['upkeepPerPetPerHour'] = [
+        { resource: 'food', amountPerHour: 100 },
+      ];
+      if (penalty !== null) {
+        habitatRow(config, 'meadow')['hungerPenaltyWhenNoFoodPerHour'] = penalty;
+      }
+    });
+
+  it('未配置 hungerPenaltyWhenNoFoodPerHour 时缺口不额外扣饥饿', () => {
+    const pet = makePet({ habitatId: 'meadow' });
+    advanceHabitat(habitatAt({ slots: [pet.id] }), [pet], T0 + HOUR, noFood(null));
+    expect(pet.condition.hunger).toBe(100);
+  });
+
+  it('配置后食物不足按 rate × dtHours 额外扣饥饿', () => {
+    const pet = makePet({ habitatId: 'meadow' });
+    const result = advanceHabitat(habitatAt({ slots: [pet.id] }), [pet], T0 + HOUR, noFood(5));
+    expect(result.habitat.stored.food).toBe(0);
+    expect(pet.condition.hunger).toBe(95);
+  });
+
+  it('蛋不参与饥饿惩罚', () => {
+    const egg = makePet({ id: 'egg', stage: 'egg', habitatId: 'meadow' });
+    advanceHabitat(habitatAt({ slots: ['egg'] }), [egg], T0 + HOUR, noFood(5));
+    expect(egg.condition.hunger).toBe(100);
+  });
+
+  it('advanceProfile：先衰减再结算饥饿惩罚', () => {
+    const pet = makePet({ habitatId: 'meadow' });
+    const result = advanceProfile(makeProfile([pet], [pet.id]), T0 + HOUR, noFood(5));
+    // 衰减 3/h 后 97，再扣 5 → 92
+    expect(result.profile.pets[pet.id]!.condition.hunger).toBe(92);
+    expect(result.patch.pets?.upsert).toHaveLength(1);
+  });
+});

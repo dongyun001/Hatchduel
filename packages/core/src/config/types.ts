@@ -146,6 +146,17 @@ export interface HabitatConfig {
   healthDecayWhenStarving: number;
   /** 饥饿/清洁均 ≥50 时每小时恢复；初版，待 sim。 */
   healthRecoveryPerHour: number;
+  /** 食物（upkeep）不足时，每只宠物每小时额外扣的饥饿；缺省 0（contract-v1.2 D-05）。 */
+  hungerPenaltyWhenNoFoodPerHour?: number;
+  /**
+   * 产出阶段系数；缺省 0.5 / 1 / 0.8（DOMAIN §6.1，contract-v1.2 D-06）。
+   * 只影响栖息地产出，不影响战斗属性。
+   */
+  productionStageMul?: {
+    juvenile: number;
+    adult: number;
+    elder: number;
+  };
   /** 默认 8h。 */
   offlineCapMs: EpochMs;
   /** 默认 24h。 */

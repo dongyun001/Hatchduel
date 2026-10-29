@@ -4,7 +4,6 @@ import {
   CONDITION_MUL_BASE,
   COUNTER_STRONG,
   COUNTER_WEAK,
-  CoreNotImplementedError,
   DAMAGE_K,
   DECAY_CAP_MS,
   ENERGY_INITIAL,
@@ -20,13 +19,8 @@ import {
   MVP_SPECIES_IDS,
   OFFLINE_CAP_MS,
   STAGE_MULTIPLIERS,
-  createPet,
-  expToNext,
-  type ConfigRepo,
-  type CreatePetInput,
 } from '@petbattle/core';
 
-const cfg = null as unknown as ConfigRepo;
 
 describe('冻结常量', () => {
   it('战斗数值与 AGENTS §3.5 一致', () => {
@@ -57,27 +51,4 @@ describe('冻结常量', () => {
     expect([...MVP_SPECIES_IDS]).toEqual(['turtle', 'fish', 'frog', 'cat', 'snake']);
     expect([...MVP_ELEMENT_IDS]).toEqual(['water', 'fire', 'grass', 'earth', 'thunder']);
   });
-});
-
-describe('expToNext', () => {
-  it('公式为 40 + level × 20', () => {
-    expect(expToNext(0)).toBe(40);
-    expect(expToNext(1)).toBe(60);
-    expect(expToNext(10)).toBe(240);
-    expect(expToNext(20)).toBe(440);
-  });
-});
-
-describe('M0 契约桩', () => {
-  // 已实现的核心函数不再列在这里：它们由 rng/config-repo/stats/advance/breeding/release/battle
-  // 等测试覆盖。目前只剩 createPet 未实现（A 会话后续批次）。
-  const cases: Array<[string, () => unknown]> = [
-    ['createPet', () => createPet(null as unknown as CreatePetInput, cfg)],
-  ];
-
-  for (const [name, run] of cases) {
-    it(`${name} 抛 CoreNotImplementedError`, () => {
-      expect(run).toThrow(CoreNotImplementedError);
-    });
-  }
 });

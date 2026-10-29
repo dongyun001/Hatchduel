@@ -259,13 +259,18 @@ export function breedImpl(
     updatedAt: now,
   };
 
-  return { child, inbred };
+  // 父母冷却（contract-v1.2 D-02）：普通 ×(1+近亲惩罚) ×(老年 ×2)，按 [a, b] 顺序返回。
+  const parentCooldowns: [EpochMs, EpochMs] = [
+    now + breedingCooldownMs(a, inbred, cfg),
+    now + breedingCooldownMs(b, inbred, cfg),
+  ];
+
+  return { child, inbred, parentCooldowns };
 }
 
 /**
- * 繁殖后父母冷却时长：`cooldownMs × (1 + 近亲惩罚) × (老年 ×2)`（DOMAIN §8.3）。
- *
- * 契约里的 `breed` 只返回子代，父母冷却需由服务端写回；先用本模块内的函数保证口径一致。
+ * 繁殖后单只父母的冷却时长：`cooldownMs × (1 + 近亲惩罚) × (老年 ×2)`（DOMAIN §8.3）。
+ * 结果由 `breed` 的 `parentCooldowns` 返回，服务端直接落库。
  */
 export function breedingCooldownMs(
   parent: PetInstance,
@@ -276,17 +281,4 @@ export function breedingCooldownMs(
   const penalty = inbred ? breeding.inbreeding.fertilityPenalty : 0;
   const elderMul = parent.stage === 'elder' ? 2 : 1;
   return Math.floor(breeding.cooldownMs * (1 + penalty) * elderMul);
-}
-
-export function parentsCooldownUntil(
-  a: PetInstance,
-  b: PetInstance,
-  now: EpochMs,
-  inbred: boolean,
-  cfg: ConfigRepo,
-): Record<Id, EpochMs> {
-  return {
-    [a.id]: now + breedingCooldownMs(a, inbred, cfg),
-    [b.id]: now + breedingCooldownMs(b, inbred, cfg),
-  };
 }
