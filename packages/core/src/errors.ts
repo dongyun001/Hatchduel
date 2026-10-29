@@ -20,13 +20,14 @@ export class TimeError extends Error {
   }
 }
 
-/** 放生被拒绝的原因（DOMAIN_MODEL §8.6）。 */
+/** 放生被拒绝的原因（DOMAIN_MODEL §8.6；`in_defense` 为 contract-v1.3 D-11）。 */
 export type ReleaseErrorReason =
   | 'pet_not_found'
   | 'cannot_release_egg'
   | 'pet_locked'
   | 'in_lineup'
   | 'in_habitat'
+  | 'in_defense'
   | 'last_adult';
 
 export class ReleaseError extends Error {

@@ -14,9 +14,10 @@ import {
   createBattleContextImpl,
   submitCommandImpl,
 } from '../src/battle/engine.js';
-import { makePet, makeRepo } from './factory.js';
+import { makePet } from './factory.js';
+import { SYNTHETIC_NORMAL, SYNTHETIC_STAGE_ID, makeSyntheticRepo } from './synthetic.js';
 
-const cfg = makeRepo();
+const cfg = makeSyntheticRepo();
 
 function playerTeam() {
   return buildBattleSetup(
@@ -35,7 +36,7 @@ function playerTeam() {
 function pveSetup(seed: number): BattleSetup {
   return {
     seed,
-    teams: [playerTeam(), buildEnemyTeam(cfg.stage('stage_1'), cfg, seed)],
+    teams: [playerTeam(), buildEnemyTeam(cfg.stage(SYNTHETIC_STAGE_ID), cfg, seed)],
   };
 }
 
@@ -116,11 +117,11 @@ describe('确定性：同一 (setup, seed, commands) 双跑逐事件一致', () 
     if (start.type === 'battleStart') expect(start.state.log).toEqual([]);
   });
 
-  it('固定种子快照（PVE stage_1，seed 99）', () => {
+  it('固定种子快照（合成配置，seed 99）', () => {
     const state = playToEnd(pveSetup(99));
     // 逐事件投影的指纹：锁定确定性；改核心逻辑必须同步更新。
     const fingerprint = digest(project(state.log));
-    expect(fingerprint).toMatchInlineSnapshot(`"599747b4"`);
+    expect(fingerprint).toMatchInlineSnapshot(`"b661e370"`);
     expect(state.phase).toBe('finished');
     expect(state.log.length).toBeGreaterThan(20);
     expect(state.log.at(-1)!.type).toBe('battleEnd');
@@ -136,7 +137,7 @@ describe('同速排序中立（P-004）', () => {
       elementId: 'water' as const,
       level: 1,
       stats: { hp: 100_000, atk: 1, def: 0, spd: 10, crit: 0, critDmg: 1.5, hit: 0, dodge: 0 },
-      skills: ['normal_strike'],
+      skills: [SYNTHETIC_NORMAL],
       traits: [],
     };
   }

@@ -43,6 +43,7 @@ const RELEASE_ERROR_MAP: Record<ReleaseErrorReason, { status: number; code: ApiE
   pet_locked: { status: 409, code: 'PET_LOCKED' },
   in_lineup: { status: 409, code: 'PET_IN_USE' },
   in_habitat: { status: 409, code: 'PET_IN_USE' },
+  in_defense: { status: 409, code: 'PET_IN_USE' },
   last_adult: { status: 409, code: 'LAST_ADULT' },
 };
 

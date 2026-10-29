@@ -104,3 +104,17 @@ export function buildEnemyTeamImpl(
     } satisfies BattleUnitInit;
   });
 }
+
+/**
+ * PvE 单边入口（contract-v1.3 D-10）：`team0` 是玩家队伍（uid `a*`），
+ * `team1` 由 `buildEnemyTeam` 生成（uid `b*`）。同 seed 完全确定。
+ */
+export function buildPveBattleSetupImpl(
+  party: readonly PetInstance[],
+  stage: StageConfig,
+  cfg: ConfigRepo,
+  seed: number,
+): BattleSetup {
+  const player = buildBattleSetupImpl([party, []], cfg, seed).teams[0];
+  return { seed, teams: [player, buildEnemyTeamImpl(stage, cfg, seed)] };
+}

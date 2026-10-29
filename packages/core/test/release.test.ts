@@ -29,6 +29,24 @@ describe('releasePet：五类拒绝（DOMAIN §8.6 / P-026 / P-035）', () => {
     expect(() => releasePet(profile, 'p', T0, cfg)).toThrow(/pet_locked/);
   });
 
+  it('防守阵容中不可放生 → in_defense（D-11）；移出后可放生', () => {
+    const pet = makePet({ id: 'p' });
+    const profile = makeProfile([pet, makePet({ id: 'keep' })], []);
+    profile.pvp.defense = ['p'];
+
+    try {
+      releasePet(profile, 'p', T0, cfg);
+      throw new Error('expected ReleaseError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ReleaseError);
+      expect((error as ReleaseError).reason).toBe('in_defense');
+    }
+
+    profile.pvp.defense = [];
+    const result = releasePet(profile, 'p', T0, cfg);
+    expect(result.profile.pets['p']).toBeUndefined();
+  });
+
   it('上阵不可放生 → in_lineup', () => {
     const pet = makePet({ id: 'p' });
     const profile = makeProfile([pet, makePet({ id: 'other' })], []);

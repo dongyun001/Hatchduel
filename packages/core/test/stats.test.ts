@@ -155,35 +155,65 @@ describe('deriveStats：比例属性 clamp（DOMAIN §4.1）', () => {
     expect(stats.dodge).toBe(0.9);
   });
 
-  it('hit 上下限 ±0.5', () => {
-    const positive = deriveStats(makePet({ traits: ['trait_test_hit'] }), cfg);
-    expect(positive.hit).toBe(0);
-
-    const config = makeRepo((c) => {
-      (speciesRow(c, 'fish')['base'] as Record<string, unknown>)['hit'] = 0.4;
+  it('hit 是加法增量（D-13）：+0.1 表示 +10 个百分点，再乘状态系数', () => {
+    const additive = makeRepo((c) => {
       addTrait(c, {
-        id: 'trait_test_hit',
-        name: '测试命中',
+        id: 't_hit_10',
+        name: '命中 +10',
         rarity: 'common',
-        description: '命中 ×3。',
-        statMods: { hit: 3 },
+        description: '命中 +0.1。',
+        statMods: { hit: 0.1 },
+        inheritance: { weight: 0.5 },
+      });
+      addTrait(c, {
+        id: 't_hit_15',
+        name: '命中 +15',
+        rarity: 'common',
+        description: '命中 +0.15。',
+        statMods: { hit: 0.15 },
         inheritance: { weight: 0.5 },
       });
     });
-    expect(deriveStats(makePet({ traits: ['trait_test_hit'] }), config).hit).toBe(0.5);
 
-    const negative = makeRepo((c) => {
+    // 基础 hit 0，满状态 condMul 1.1：(0 + 0.1) × 1.1
+    expect(deriveStats(makePet({ traits: ['t_hit_10'] }), additive).hit).toBeCloseTo(0.11, 4);
+    // 多条特质相加：(0 + 0.1 + 0.15) × 1.1
+    expect(
+      deriveStats(makePet({ traits: ['t_hit_10', 't_hit_15'] }), additive).hit,
+    ).toBeCloseTo(0.275, 4);
+  });
+
+  it('hit 加法后可正可负，并 clamp 到 ±0.5', () => {
+    const negativeBase = makeRepo((c) => {
       (speciesRow(c, 'fish')['base'] as Record<string, unknown>)['hit'] = -0.4;
       addTrait(c, {
-        id: 'trait_test_hit',
-        name: '测试命中',
+        id: 't_hit_10',
+        name: '命中 +10',
         rarity: 'common',
-        description: '命中 ×3。',
+        description: '命中 +0.1。',
+        statMods: { hit: 0.1 },
+        inheritance: { weight: 0.5 },
+      });
+    });
+    // (-0.4 + 0.1) × 1.1 = -0.33
+    expect(deriveStats(makePet({ traits: ['t_hit_10'] }), negativeBase).hit).toBeCloseTo(-0.33, 4);
+
+    const low = makeRepo((c) => {
+      (speciesRow(c, 'fish')['base'] as Record<string, unknown>)['hit'] = -0.5;
+    });
+    expect(deriveStats(makePet(), low).hit).toBe(-0.5);
+
+    const high = makeRepo((c) => {
+      addTrait(c, {
+        id: 't_hit_huge',
+        name: '命中 +3',
+        rarity: 'common',
+        description: '命中 +3（用于 clamp）。',
         statMods: { hit: 3 },
         inheritance: { weight: 0.5 },
       });
     });
-    expect(deriveStats(makePet({ traits: ['trait_test_hit'] }), negative).hit).toBe(-0.5);
+    expect(deriveStats(makePet({ traits: ['t_hit_huge'] }), high).hit).toBe(0.5);
   });
 
   it('crit/critDmg/hit/dodge 不受等级、阶段、基因、相性影响', () => {

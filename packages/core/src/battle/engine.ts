@@ -21,6 +21,8 @@ import {
   HIT_CLAMP_MAX,
   HIT_CLAMP_MIN,
   MAX_TURNS,
+  SMALL_SKILL_ENERGY_MIN,
+  ULTIMATE_ENERGY_MIN,
 } from '../constants.js';
 import type { ConfigRepo, EffectSpec, SkillConfig } from '../config/types.js';
 import { mulberry32 } from '../rng.js';
@@ -614,6 +616,77 @@ export function submitCommandImpl(ctx: BattleContext, cmd: Command): BattleEvent
  * 2. 否则选可用技能中 power 最高者，打血量比例最低的敌人；
  * 3. 同分按技能 id、目标 uid 字典序，保证完全确定。
  */
+function isHealSkill(skill: SkillConfig): boolean {
+  return skill.power === 0 && skill.effects.some((effect) => effect.kind === 'heal');
+}
+
+/** 伤害技能打分：power 高者优先；同分打血量更低的敌人；同分按指令顺序（确定性）。 */
+function pickBestDamage(
+  ctx: BattleContext,
+  commands: ReadonlyArray<Extract<Command, { type: 'skill' }>>,
+): Extract<Command, { type: 'skill' }> | null {
+  let best: Extract<Command, { type: 'skill' }> | null = null;
+  let bestPower = Number.NEGATIVE_INFINITY;
+  let bestTargetHp = Number.POSITIVE_INFINITY;
+
+  for (const cmd of commands) {
+    const skill = ctx.cfg.skill(cmd.skillId);
+    const targetUid = cmd.targetUids[0];
+    const target = targetUid ? findUnit(ctx, targetUid) : undefined;
+    const targetHp = target ? target.hp : 0;
+    if (skill.power > bestPower || (skill.power === bestPower && targetHp < bestTargetHp)) {
+      best = cmd;
+      bestPower = skill.power;
+      bestTargetHp = targetHp;
+    }
+  }
+  return best;
+}
+
+/** 治疗技能打分：效果数值高者优先；同分按指令顺序。 */
+function pickBestHeal(
+  ctx: BattleContext,
+  commands: ReadonlyArray<Extract<Command, { type: 'skill' }>>,
+): Extract<Command, { type: 'skill' }> | null {
+  let best: Extract<Command, { type: 'skill' }> | null = null;
+  let bestValue = Number.NEGATIVE_INFINITY;
+  for (const cmd of commands) {
+    const skill = ctx.cfg.skill(cmd.skillId);
+    let value = 0;
+    for (const effect of skill.effects) if (effect.kind === 'heal') value += effect.value;
+    if (value > bestValue) {
+      best = cmd;
+      bestValue = value;
+    }
+  }
+  return best;
+}
+
+/** 单位技能里最便宜的大招成本；没有大招返回 Infinity。 */
+function cheapestUltimateCost(ctx: BattleContext, unit: BattleUnit): number {
+  let cheapest = Number.POSITIVE_INFINITY;
+  for (const skillId of unit.skills) {
+    let skill: SkillConfig;
+    try {
+      skill = ctx.cfg.skill(skillId);
+    } catch {
+      continue;
+    }
+    if (skill.cost >= ULTIMATE_ENERGY_MIN && skill.cost < cheapest) cheapest = skill.cost;
+  }
+  return cheapest;
+}
+
+/**
+ * 确定性 AI 策略（D-09 留能量版）：
+ * 1. 有队友血量低于 50% 且能放治疗 → 治疗；
+ * 2. 大招可用（精力 ≥ 大招 cost）→ 放大招；
+ * 3. 精力 ≥ 大招 cost − 20 → 用普攻攒能量，不再乱放小技能；
+ * 4. 否则有小技能可用 → 放小技能；
+ * 5. 否则普攻。
+ *
+ * 同分按技能/指令顺序，保证完全确定。
+ */
 export function chooseAiCommandImpl(ctx: BattleContext): Command | null {
   const actor = ctx.state.order[ctx.state.cursor];
   if (!actor) return null;
@@ -626,30 +699,32 @@ export function chooseAiCommandImpl(ctx: BattleContext): Command | null {
   if (commands.length === 0) return null;
 
   const hurt = alliesOf(ctx, unit).some((ally) => ally.hp / ally.maxHp < 0.5);
-
-  let best: Extract<Command, { type: 'skill' }> | null = null;
-  let bestScore = Number.NEGATIVE_INFINITY;
-  let bestTargetHp = Number.POSITIVE_INFINITY;
-
-  for (const cmd of commands) {
-    const skill = ctx.cfg.skill(cmd.skillId);
-    const isHeal = skill.power === 0 && skill.effects.some((effect) => effect.kind === 'heal');
-    if (isHeal && !hurt) continue;
-    const targetUid = cmd.targetUids[0];
-    const target = targetUid ? findUnit(ctx, targetUid) : undefined;
-    const targetHp = target ? target.hp : 0;
-    const score = isHeal ? 1000 : skill.power;
-    if (score > bestScore || (score === bestScore && targetHp < bestTargetHp)) {
-      best = cmd;
-      bestScore = score;
-      bestTargetHp = targetHp;
-    }
+  if (hurt) {
+    const heals = commands.filter((cmd) => isHealSkill(ctx.cfg.skill(cmd.skillId)));
+    const heal = pickBestHeal(ctx, heals);
+    if (heal) return heal;
   }
 
-  if (best) return best;
+  const ultimates = commands.filter(
+    (cmd) => ctx.cfg.skill(cmd.skillId).cost >= ULTIMATE_ENERGY_MIN,
+  );
+  const ultimate = pickBestDamage(ctx, ultimates);
+  if (ultimate) return ultimate;
 
-  // 全部被动/纯功能技能都不可用时，普攻永远可用；兜底取第一条指令。
-  return commands[0] ?? null;
+  const normal = commands.find((cmd) => ctx.cfg.skill(cmd.skillId).kind === 'normal') ?? null;
+
+  // 距最便宜的大招只差一回合的回能时，普攻攒能量（避免小技能把大招无限推后）。
+  const ultCost = cheapestUltimateCost(ctx, unit);
+  if (normal && unit.energy >= ultCost - ENERGY_PER_TURN) return normal;
+
+  const smalls = commands.filter((cmd) => {
+    const cost = ctx.cfg.skill(cmd.skillId).cost;
+    return cost >= SMALL_SKILL_ENERGY_MIN && cost < ULTIMATE_ENERGY_MIN;
+  });
+  const small = pickBestDamage(ctx, smalls);
+  if (small) return small;
+
+  return normal ?? commands[0] ?? null;
 }
 
 /**
