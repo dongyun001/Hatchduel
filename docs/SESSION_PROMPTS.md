@@ -17,7 +17,7 @@
 
 | 会话 | 状态 | 下一步 |
 |---|---|---|
-| A | 已完成首批，**还差 `createPet`** | 按 §6 追加任务补齐；它阻塞 D 的批量模拟和 C 的初始 3 只宠物 |
+| A | 首批已完成；**第二批待做**（createPet + contract-v1.2 调整） | 按 §6 执行；它阻塞 D 的批量模拟和 C 的初始 3 只宠物 |
 | D | 已完成首批 | 等 `createPet` 后跑真实批量模拟，产出 BALANCE 报告 |
 | C | 已完成首批 | 等 `createPet` 后接初始存档；继续栖息地/宠物端点 |
 | B | **Cocos Dashboard 已装，但没有编辑器版本** | 在 Dashboard 里安装 3.x LTS，然后按 §4 开工 |
@@ -259,36 +259,63 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 
 ---
 
-## 6. A 追加任务：实现 `createPet`
+## 6. A 第二批任务（contract-v1.2）
 
-工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开始前先 `git merge main` 把首批合并结果同步进来。
+工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开工前先 `git merge main`。
 
 ```
-你继续负责 PetBattle 的 A 核心领域会话，这次只补一个函数：createPet。
+你继续负责 PetBattle 的 A 核心领域会话，做第二批。
 
-工作目录：D:\github-mine\petbattle-core（分支 wt/core）。先 git merge main，再开工。
-只改：packages/core/src/**（除 config/data）、packages/core/test/**、docs/DOMAIN_MODEL.md。
-不要改：packages/core/src/index.ts、constants.ts、config/schema.ts、config/types.ts、
-        packages/protocol/**、server/**、client/**、根配置。
+工作目录：D:\github-mine\petbattle-core（分支 wt/core）。
+开工前先 git merge main；本批按 contract-v1.2 裁定执行，权威说明见 docs/CONTRACT.md §7.1（D-01~D-07）。
 
-背景：首批实现已合入 main，但 createPet 仍是 CoreNotImplementedError 桩
-（packages/core/src/api.ts 与 test/contract.test.ts 各留了一处）。
-它阻塞 D 的批量模拟（初始队伍）和 C 的初始 3 只宠物。
+只改：packages/core/src/**（除 config/data/**）、packages/core/test/**、docs/DOMAIN_MODEL.md。
+不要改：packages/core/src/config/data/**（D 的）、packages/protocol/**、server/**、client/**、
+        根配置、docs/CONTRACT.md、docs/PITFALLS.md。
 
-任务：
-1. 按 DOMAIN_MODEL §3/§5.1/§8.2 实现 createPet(input, cfg)：
-   - 校验 speciesId/elementId 存在、level 1~20、基因 0~100 取整；
-   - stage 固定为 'egg'，stageChangedAt = bornAt = now；
-   - fertility.readyAt = now + hatchMs + juvenileMs，cooldownUntil = 0，
-     penalty 取 input（默认 0）；
-   - condition 初始 { hunger:100, mood:100, hygiene:100, health:100 }；
-   - traits/hiddenTraits 去重；parents/ancestors 缺省为空；revision 相关字段不在这里处理。
-2. 删除 contract.test.ts 里 createPet 的桩用例，新增 create-pet.test.ts 覆盖：
-   正常建体、未知物种/属性抛错、等级/基因边界、蛋阶段与 readyAt。
-3. 跑 pnpm typecheck && pnpm test && pnpm lint && pnpm test:coverage（core 行覆盖率仍 ≥85%）。
-4. 汇报按 AGENTS.md §7；不要自己合并到 main。
+一、已批准的契约调整（必须落地，不要再提请求）
+1. releasePet(profile, petId, now, cfg: ConfigRepo)：cfg 必填；返还按 economy.releaseRefund
+   的 base/perLevel/perGeneSumDivisor/rarityBonus 全量计算，不允许再用稀有加成 0 兜底。
+2. BreedResult 增加 parentCooldowns: [EpochMs, EpochMs]：普通 cooldownMs；近亲 ×(1+penalty)；
+   老年 ×2；两者相乘。服务端直接落库，不再自己推口径。
+3. BattleEngine 增加 autoCommand(uid: string): Command：与内置确定性 AI 同一份策略，禁止复制第二套。
+4. 新增导出 applyExp(pet: PetInstance, amount: number, cfg: ConfigRepo): PetInstance：
+   exp += amount；while (exp >= expToNext(level) && level < 20) { exp -= expToNext(level); level++ }；
+   返回新个体。不处理 stageProgress/首通奖励（那属于服务端结算）。
+5. HabitatConfig 增加两个可选字段（schema + types）：
+   hungerPenaltyWhenNoFoodPerHour?: number；productionStageMul?: { juvenile: number; adult: number; elder: number }。
+   - advanceHabitat 食物不足时按前者额外扣 hunger，缺省 0；
+   - 产出阶段系数读后者，缺省 0.5 / 1 / 0.8（DOMAIN §6.1）；不要在代码里再写第二套常量。
+   - 不修改 config/data/**；D 会补样例值。
+6. critDmg × condMul：保留现实现，不改代码；在 docs/DOMAIN_MODEL.md §4 补一句
+   “150% 是基础倍率，状态/特质/被动可修正”，并注明这是 v1.2 裁定（D-04）。
 
-契约：签名不变（CONTRACT §5.3）；如果发现 input 字段不够，按 CONTRACT §9.3 提变更请求，不要私自加导出。
+二、本批任务（按顺序，每步补测试）
+1. createPet：按 DOMAIN §3/§5.1/§8.2 实现。校验 species/element 存在、level 1~20、基因 0~100 取整；
+   stage='egg'，stageChangedAt=bornAt=now；fertility.readyAt=now+hatchMs+juvenileMs，
+   cooldownUntil=0，penalty 取入参默认 0；condition 全 100；traits/hiddenTraits 去重；
+   parents 缺省 [null,null]，ancestors 缺省 []。
+   测试：正常建体、未知物种/属性、等级与基因边界、readyAt、蛋阶段。
+2. applyExp：公式与 20 级封顶；测试 1→2、一次跨多级、满级溢出、0 经验。
+3. D-01~D-03 的签名/返回值调整，更新所有受影响测试；contract.test.ts 里 createPet 的桩用例删除。
+   若所有函数都已实现，contract.test.ts 只保留常量断言。
+4. D-05/D-06：schema/types + 结算实现；测试“未配置时 = 0 / 0.5,1,0.8”和“配置后生效”。
+5. 更新 docs/DOMAIN_MODEL.md：实现说明、critDmg 措辞、D-05/D-06 字段与默认值。
+6. 每完成一项跑 pnpm typecheck && pnpm test && pnpm lint；结束跑 pnpm test:coverage，
+   packages/core/src 行覆盖率 ≥85%（当前 99.27%，不要明显回退）。
+7. 确定性：同 (setup, seed, commands) 事件流逐条一致；签名变化导致快照重建时，必须在报告里单独说明。
+
+三、禁止
+- 不改 config/data/**、protocol、server、client、根配置、CONTRACT.md；
+- 不新增未批准的公共导出；
+- 不自己合并 main、不推送。
+
+四、汇报（AGENTS.md §7），额外回答：
+- 是否重建了确定性快照，为什么；
+- D 需要补哪些配置字段（名称、建议值、影响）；
+- C 接线需要注意的签名变化（releasePet / breed / BattleEngine / applyExp）。
+
+完成后我（0 号）会跑 integration 并合并；D 的批量 sim 和 C 的初始档都在等这一批。
 ```
 
 ## 7. 变更记录
@@ -297,3 +324,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 |---|---|---|
 | v1.0 | 2026-10-29 | 初版：A/C/D/B 四份启动提示词；并行数量与前置条件 |
 | v1.1 | 2026-10-29 | 首批合并后更新状态；新增 A 的 createPet 追加任务；B 的 Cocos 编辑器仍未安装 |
+| v1.2 | 2026-10-29 | §6 替换为 A 第二批任务（createPet + contract-v1.2 的 D-01~D-07） |

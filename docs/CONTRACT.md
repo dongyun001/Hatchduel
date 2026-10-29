@@ -19,7 +19,7 @@
 | 契约 | 位置 | 状态 |
 |---|---|---|
 | 传输协议 v1 | `packages/protocol/src/**` | 冻结；`PROTOCOL_VERSION = 'v1'` |
-| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；除 `expToNext` / `validateConfig` 外全部抛 `CoreNotImplementedError` |
+| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；首批已实现，仅 `createPet` 仍为桩（§10.7）；v1.2 的一次签名调整见 §7.1 |
 | 配置 schema | `packages/core/src/config/schema.ts` + `config/types.ts` | 冻结校验规则；数据由 D 填 |
 | 配置数据样例 | `packages/core/src/config/data/*.json` | 初版样例，**不调平衡**，待 sim |
 | 错误码 | `packages/protocol/src/errors.ts` | 冻结；只增不改 |
@@ -197,16 +197,17 @@ contentVersion: string
 | `advanceHabitat(habitat, pets, now, cfg)` | 产出（8h 上限）+ 消耗；宠物数为 0 时产出 0 |
 | `advanceProfile(profile, now, cfg)` | **先宠物、后栖息地**；幂等；返回 `{ profile, patch }` |
 | `checkBreeding(a, b, now, profile, cfg)` | 顺序：同一只 → 性别 → 阶段 → 锁定 → readyAt → 冷却 → 空位 → 成本 |
-| `breed(a, b, now, cfg, rng)` | 物种/属性 50/50；基因均值 + Irwin–Hall；近亲 -5/+2%/+20%；特质 3% 突变 |
+| `breed(a, b, now, cfg, rng)` | 物种/属性 50/50；基因均值 + Irwin–Hall；近亲 -5/+2%/+20%；特质 3% 突变；返回 `parentCooldowns: [EpochMs, EpochMs]`（v1.2） |
 | `isInbred(a, b, maxDepth)` | 3 代内共同祖先 |
-| `releasePet(profile, petId, now)` | 蛋/锁定/上阵/栖息地/最后成年 都拒绝；返还基因尘 |
+| `releasePet(profile, petId, now, cfg)` | 蛋/锁定/上阵/栖息地/最后成年 都拒绝；按 `economy.releaseRefund` 返还基因尘（v1.2 增加 `cfg`） |
 | `buildBattleSetup(teams, cfg, seed)` | 个体快照 → 3v3；uid 由本函数生成 |
 | `buildEnemyTeam(stage, cfg, seed)` | 同 stage/seed 同队伍；敌方满状态 |
 | `expToNext(level)` | `40 + level × 20`（M0 唯一实现的公式） |
+| `applyExp(pet, amount, cfg)` | 加经验并按 `expToNext` 循环升级（≤20 级），返回新个体（v1.2 新增） |
 | `validateConfig(input)` / `assertConfig(input)` | 配置校验 |
-| `BattleEngine` | `create` / `availableCommands` / `submit` / `state` |
+| `BattleEngine` | `create` / `availableCommands` / `submit` / `state` / `autoCommand(uid)`（v1.2） |
 
-除 `expToNext`、`validateConfig`、`assertConfig` 外，M0 全部抛 `CoreNotImplementedError`（测试会验证）。
+首批已实现除 `createPet` 与 `applyExp` 外的全部函数；`createPet` 是当前唯一桩（§10.7），`applyExp` 随 v1.2 新增。未实现项由 `contract.test.ts` 显式覆盖。
 
 ### 5.4 冻结常量（`src/constants.ts`）
 
@@ -274,6 +275,22 @@ contentVersion: string
 | C-09 | TECH §8.1 没有 `contentVersion` 的落点 | 新增 `content.json`；`ConfigData.contentVersion` | D |
 
 这些澄清已记录进 `docs/PITFALLS.md`（P-038/P-039/P-040），不再逐份改 A/C/E 拥有的文档；A/D 在各自文档里同步实现细节即可。
+
+### 7.1 A 首批实现反馈的裁定（contract-v1.2，2026-10-29）
+
+A 首批完成后提了 4 条变更请求和 3 条待明确项。裁定如下；**M1 早期允许一次集中的 core 签名调整（当前无外部消费者），统一记在 contract-v1.2；M2 起按 §9.2 的 v2 规则执行**。
+
+| 编号 | 议题 | 裁定 | 落地 |
+|---|---|---|---|
+| D-01 | `releasePet` 拿不到配置，特质稀有度加成恒为 0 | **补必填 `cfg: ConfigRepo`**，按 `economy.releaseRefund` 计算返还；无配置不是合法调用 | A 改签名 + 测试；C 接线时按新签名 |
+| D-02 | 父母繁殖冷却口径只在 A 内部，服务端会另写一套 | **扩展 `BreedResult.parentCooldowns: [EpochMs, EpochMs]`**（与 `child` 同时返回）；不额外导出函数 | A 改实现 + 测试 |
+| D-03 | 敌方/自动战斗的 AI 入口不可用 | **`BattleEngine.autoCommand(uid): Command`** 公开；确定性策略与内置 AI 同一份 | A 加方法 + 测试 |
+| D-04 | `critDmg` 是否吃 `condMul`（满状态 165% vs AGENTS 写 150%） | **保留 DOMAIN §4.1 实现**：150% 是基础倍率，状态/特质/被动可修正；PRD §8.3 原文“可被特质调整”支持这一点。更新 docs 措辞，不改代码 | A 在 DOMAIN 补一句；0 号在本文件 §5.4 注明 |
+| D-05 | 食物不足的额外饥饿惩罚缺系数 | **`HabitatConfig.hungerPenaltyWhenNoFoodPerHour?: number`**（可选，缺省 0）；A 加 schema 字段与结算，D 填数值 | A 改 schema/结算；D 补数据 |
+| D-06 | 产出阶段系数 0.5/1/0.8 写死在代码 | **`HabitatConfig.productionStageMul?: { juvenile; adult; elder }`**（可选，缺省 0.5/1/0.8）；A 改为读配置，D 填数值 | A 改实现；D 补数据 |
+| D-07 | `createPet` 与升级经验 | `createPet` **本批必做**；新增 `applyExp(pet, amount, cfg)`（按 `expToNext` 循环升级，≤20 级） | A 实现 + 测试 |
+
+> D-05/D-06 的字段是**可选**的，避免 D 还没填数据时阻断 A；但两者都必须从配置读取，不允许 A 再写死第二套默认值。
 
 ---
 
@@ -419,3 +436,4 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 |---|---|---|
 | contract-v1 | 2026-10-28 | 首次冻结：workspace/CI、protocol v1、core 公共契约、配置 schema 与样例、server Hello、接手点与变更流程 |
 | contract-v1.1 | 2026-10-29 | 兼容补充：`BASE_REVISION_HEADER`；记录 M1 首批集成结果与 `createPet` 缺口 |
+| contract-v1.2 | 2026-10-29 | core 签名集中调整（D-01~D-07）：`releasePet` 加 cfg、`BreedResult.parentCooldowns`、`BattleEngine.autoCommand`、`applyExp`、栖息地两个可选配置字段；协议不变 |
