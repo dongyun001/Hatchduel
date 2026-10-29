@@ -22,10 +22,10 @@ export const STARTERS: ReadonlyArray<{ speciesId: string; elementId: 'water' | '
 /** 每关假定的玩家等级（重复刷关 + 繁殖后的预期值，见 docs/BALANCE.md）。 */
 export const PLAYER_LEVEL_BY_ORDER: Readonly<Record<number, number>> = {
   1: 1,
-  2: 3,
-  3: 4,
-  4: 6,
-  5: 8,
+  2: 4,
+  3: 5,
+  4: 7,
+  5: 9,
 };
 
 export interface PetFixture {
@@ -98,8 +98,9 @@ export function makeSimProfile(cfg: ConfigRepo, data: ConfigData, now: EpochMs =
   const habitatConfig = data.habitats[0];
   if (!habitatConfig) throw new Error('配置缺少栖息地');
 
-  const pets = STARTERS.map((starter, index) =>
-    makeAdultPet(cfg, {
+  const habitatId = 'sim_habitat_1';
+  const pets = STARTERS.map((starter, index) => {
+    const pet = makeAdultPet(cfg, {
       id: `sim_pet_${index}`,
       speciesId: starter.speciesId,
       elementId: starter.elementId,
@@ -107,11 +108,13 @@ export function makeSimProfile(cfg: ConfigRepo, data: ConfigData, now: EpochMs =
       gene: 50,
       level: 1,
       now,
-    }),
-  );
+    });
+    // 状态衰减按 pet.habitatId 判定（DOMAIN §5.2 / advanceProfileImpl），
+    // 只写 habitat.slots 不够，必须双向关联。
+    return { ...pet, habitatId };
+  });
 
   const petIds = pets.map((pet) => pet.id);
-  const habitatId = 'sim_habitat_1';
 
   const currencies = {
     coin: data.economy.startingResources.coin ?? 0,

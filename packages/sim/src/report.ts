@@ -184,6 +184,16 @@ function renderEconomy(curve: EconomyCurve): string[] {
 
   const first = curve.points[0];
   const last = curve.points[curve.points.length - 1];
+  lines.push(
+    `离线封顶：24h 单次推进产出 / 8h 单次推进产出 = ${fmt(curve.offlineCapRatio, 3)}（≈1 表示 8h 截断生效）；曲线负值 ${curve.hasNegativeValues ? '有' : '无'}。`,
+    '',
+  );
+  if (!curve.offlineCapVerified) {
+    lines.push('- 离线封顶校验未通过：检查 `advanceHabitat` 是否按 `offlineCapMs` 截断 dt。', '');
+  }
+  if (curve.hasNegativeValues) {
+    lines.push('- 资源曲线出现负值：检查领取/消耗顺序。', '');
+  }
   if (first && last) {
     lines.push(
       `第 ${curve.days} 天结束：金币 ${fmt(last.coin)}（+${fmt(last.coin - first.coin)}）、食物 ${fmt(last.food)}（${fmt(last.food - first.food)}）、基因尘 ${fmt(last.geneDust)}（+${fmt(last.geneDust - first.geneDust)}）。`,
@@ -217,7 +227,18 @@ function renderBreeding(stats: BalanceReport['breeding']): string[] {
     return lines;
   }
 
-  lines.push(`样本 ${stats.samples}；近亲配对比例 ${fmt(stats.inbredRate, 3)}；非有限数值 ${stats.invalidNumbers}。`, '');
+  lines.push(
+    `样本 ${stats.samples}；随机 founder 配对近亲率 ${fmt(stats.randomInbredRate, 3)}（预期 0，founder 互不相关）；构造近亲配对命中率 ${fmt(stats.inbredRate, 3)}（预期 1）；对照误判率 ${fmt(stats.controlInbredRate, 3)}（预期 0）；子代祖先已落库 ${stats.ancestorVerified ? '是' : '否'}；非有限数值 ${stats.invalidNumbers}。`,
+    '',
+  );
+  if (!stats.ancestorVerified || stats.inbredRate !== 1) {
+    lines.push('- 近亲实验未生效：检查 `breed` 是否把父母写入 `child.ancestors`，以及 `isInbred` 的深度过滤。', '');
+  } else {
+    lines.push(
+      '- 近亲实验有效：A×B 的子代 C 带父母祖先，A×C 被判为 3 代内近亲；C×无关 founder 为对照。随机 founder 配对近亲率 0 是预期结果。',
+      '',
+    );
+  }
   lines.push('**总体子代**', '');
   lines.push(...renderGroup('总体', stats.overall));
   lines.push('');
@@ -300,19 +321,24 @@ export function renderConsoleSummary(report: BalanceReport): string {
     lines.push(
       `战斗：${report.battle.battles} 场，胜率 ${fmt(report.battle.winRate, 3)}，平局 ${fmt(report.battle.drawRate, 3)}，平均 ${fmt(report.battle.avgTurns)} 回合，大招间隔 ${fmt(report.battle.avgUltimateInterval)}`,
     );
+    for (const stage of report.battle.perStage) {
+      lines.push(
+        `  ${stage.stageId}: 胜率 ${fmt(stage.winRate, 3)}，平局 ${fmt(stage.drawRate, 3)}，平均 ${fmt(stage.avgTurns)} 回合`,
+      );
+    }
   } else {
     lines.push(`战斗：未运行（${report.battle.reason ?? 'unknown'}）`);
   }
   if (report.economy.status === 'ok') {
     lines.push(
-      `经济：第 ${report.economy.days} 天金币 ${fmt(report.economy.totalCoin)} / 食物 ${fmt(report.economy.totalFood)} / 基因尘 ${fmt(report.economy.totalGeneDust)}`,
+      `经济：第 ${report.economy.days} 天金币 ${fmt(report.economy.totalCoin)} / 食物 ${fmt(report.economy.totalFood)} / 基因尘 ${fmt(report.economy.totalGeneDust)}；离线封顶 ${report.economy.offlineCapVerified ? '生效' : '异常'}（24h/8h=${fmt(report.economy.offlineCapRatio, 3)}），负值 ${report.economy.hasNegativeValues ? '有' : '无'}`,
     );
   } else {
     lines.push(`经济：未运行（${report.economy.reason ?? 'unknown'}）`);
   }
   if (report.breeding.status === 'ok') {
     lines.push(
-      `繁殖：${report.breeding.samples} 次，突变率 ${fmt(report.breeding.overall.mutationRate, 3)}，近亲比例 ${fmt(report.breeding.inbredRate, 3)}`,
+      `繁殖：${report.breeding.samples} 次，突变率 ${fmt(report.breeding.overall.mutationRate, 3)}，随机配对近亲率 ${fmt(report.breeding.randomInbredRate, 3)}，构造近亲命中率 ${fmt(report.breeding.inbredRate, 3)}`,
     );
   } else {
     lines.push(`繁殖：未运行（${report.breeding.reason ?? 'unknown'}）`);

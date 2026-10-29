@@ -36,6 +36,9 @@ export function unavailableEconomy(reason: string, days: number): EconomyCurve {
     totalCoin: 0,
     totalFood: 0,
     totalGeneDust: 0,
+    offlineCapRatio: 0,
+    offlineCapVerified: false,
+    hasNegativeValues: false,
   };
 }
 
@@ -109,6 +112,16 @@ export function runEconomyCurve(
     const dayEnd = points.filter((point) => point.hour > 0 && point.hour % 24 === 0);
     const last = points[points.length - 1] ?? snapshot(profile, 0);
 
+    // 离线封顶：24h 单次推进的产出应约等于 8h（core 按 offlineCapMs 截断），而不是 3 倍。
+    const eightHour = producedAfter(cfg, data, 8);
+    const day = producedAfter(cfg, data, 24);
+    const offlineCapRatio = eightHour > 0 ? day / eightHour : 0;
+    const offlineCapVerified = eightHour > 0 && offlineCapRatio > 0.5 && offlineCapRatio < 1.2;
+
+    const hasNegativeValues = points.some(
+      (point) => point.coin < 0 || point.food < 0 || point.geneDust < 0 || point.avgHunger < 0,
+    );
+
     return {
       status: 'ok',
       days,
@@ -117,8 +130,21 @@ export function runEconomyCurve(
       totalCoin: last.coin,
       totalFood: last.food,
       totalGeneDust: last.geneDust,
+      offlineCapRatio: round(offlineCapRatio, 3),
+      offlineCapVerified,
+      hasNegativeValues,
     };
   } catch (error) {
     return unavailableEconomy(describeError(error), days);
   }
+}
+
+/** 单次推进 `hours` 后，栖息地里未领取的产出金币；用于验证离线封顶。 */
+function producedAfter(cfg: ConfigRepo, data: ConfigData, hours: number): number {
+  const fixture = makeSimProfile(cfg, data, 0);
+  const advanced = advanceProfile(fixture.profile, hours * HOUR_MS, cfg).profile;
+  return Object.values(advanced.habitats).reduce(
+    (sum, habitat) => sum + (habitat.stored.coin ?? 0),
+    0,
+  );
 }

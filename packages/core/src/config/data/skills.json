@@ -15,7 +15,15 @@
     "cost": 45,
     "target": "single",
     "power": 0.95,
-    "effects": [{ "kind": "slow", "value": 0.15, "duration": 2, "chance": 0.35, "stat": "spd" }]
+    "effects": [
+      {
+        "kind": "slow",
+        "value": 0.15,
+        "duration": 2,
+        "chance": 0.35,
+        "stat": "spd"
+      }
+    ]
   },
   {
     "id": "water_torrent",
@@ -24,7 +32,15 @@
     "cost": 75,
     "target": "all",
     "power": 1.7,
-    "effects": [{ "kind": "debuff", "value": 0.1, "duration": 2, "chance": 0.4, "stat": "def" }]
+    "effects": [
+      {
+        "kind": "debuff",
+        "value": 0.1,
+        "duration": 2,
+        "chance": 0.4,
+        "stat": "def"
+      }
+    ]
   },
   {
     "id": "fire_ember",
@@ -32,8 +48,15 @@
     "kind": "active",
     "cost": 45,
     "target": "single",
-    "power": 1.0,
-    "effects": [{ "kind": "dot", "value": 4, "duration": 2, "chance": 0.35 }]
+    "power": 0.9,
+    "effects": [
+      {
+        "kind": "dot",
+        "value": 4,
+        "duration": 2,
+        "chance": 0.35
+      }
+    ]
   },
   {
     "id": "fire_blaze",
@@ -41,8 +64,15 @@
     "kind": "active",
     "cost": 78,
     "target": "all",
-    "power": 1.75,
-    "effects": [{ "kind": "dot", "value": 5, "duration": 2, "chance": 0.4 }]
+    "power": 1.0,
+    "effects": [
+      {
+        "kind": "dot",
+        "value": 5,
+        "duration": 2,
+        "chance": 0.4
+      }
+    ]
   },
   {
     "id": "grass_vine",
@@ -50,8 +80,15 @@
     "kind": "active",
     "cost": 45,
     "target": "single",
-    "power": 1.0,
-    "effects": [{ "kind": "stun", "value": 0, "duration": 1, "chance": 0.15 }]
+    "power": 0.9,
+    "effects": [
+      {
+        "kind": "stun",
+        "value": 0,
+        "duration": 1,
+        "chance": 0.15
+      }
+    ]
   },
   {
     "id": "grass_bloom",
@@ -60,7 +97,14 @@
     "cost": 72,
     "target": "allyAll",
     "power": 0,
-    "effects": [{ "kind": "heal", "value": 20, "duration": 0, "chance": 1 }]
+    "effects": [
+      {
+        "kind": "heal",
+        "value": 60,
+        "duration": 0,
+        "chance": 1
+      }
+    ]
   },
   {
     "id": "earth_rock",
@@ -69,7 +113,15 @@
     "cost": 48,
     "target": "single",
     "power": 1.05,
-    "effects": [{ "kind": "debuff", "value": 0.12, "duration": 2, "chance": 0.3, "stat": "spd" }]
+    "effects": [
+      {
+        "kind": "debuff",
+        "value": 0.12,
+        "duration": 2,
+        "chance": 0.3,
+        "stat": "spd"
+      }
+    ]
   },
   {
     "id": "earth_quake",
@@ -78,7 +130,14 @@
     "cost": 76,
     "target": "all",
     "power": 1.7,
-    "effects": [{ "kind": "stun", "value": 0, "duration": 1, "chance": 0.15 }]
+    "effects": [
+      {
+        "kind": "stun",
+        "value": 0,
+        "duration": 1,
+        "chance": 0.15
+      }
+    ]
   },
   {
     "id": "thunder_spark",
@@ -86,8 +145,15 @@
     "kind": "active",
     "cost": 42,
     "target": "single",
-    "power": 0.95,
-    "effects": [{ "kind": "silence", "value": 0, "duration": 1, "chance": 0.2 }]
+    "power": 0.85,
+    "effects": [
+      {
+        "kind": "silence",
+        "value": 0,
+        "duration": 1,
+        "chance": 0.2
+      }
+    ]
   },
   {
     "id": "thunder_storm",
@@ -95,8 +161,16 @@
     "kind": "active",
     "cost": 80,
     "target": "all",
-    "power": 1.8,
-    "effects": [{ "kind": "slow", "value": 0.2, "duration": 2, "chance": 0.3, "stat": "spd" }]
+    "power": 1.0,
+    "effects": [
+      {
+        "kind": "slow",
+        "value": 0.2,
+        "duration": 2,
+        "chance": 0.3,
+        "stat": "spd"
+      }
+    ]
   },
   {
     "id": "turtle_shell_bash",
@@ -114,7 +188,15 @@
     "cost": 55,
     "target": "all",
     "power": 1.1,
-    "effects": [{ "kind": "cleanse", "value": 0, "duration": 0, "chance": 1, "target": "allAllies" }]
+    "effects": [
+      {
+        "kind": "cleanse",
+        "value": 0,
+        "duration": 0,
+        "chance": 1,
+        "target": "allAllies"
+      }
+    ]
   },
   {
     "id": "frog_croak",
@@ -123,7 +205,14 @@
     "cost": 60,
     "target": "single",
     "power": 0,
-    "effects": [{ "kind": "stun", "value": 0, "duration": 1, "chance": 0.45 }]
+    "effects": [
+      {
+        "kind": "stun",
+        "value": 0,
+        "duration": 1,
+        "chance": 0.45
+      }
+    ]
   },
   {
     "id": "cat_pounce",
@@ -131,7 +220,7 @@
     "kind": "active",
     "cost": 45,
     "target": "single",
-    "power": 1.35,
+    "power": 1.0,
     "effects": []
   },
   {
@@ -140,7 +229,14 @@
     "kind": "active",
     "cost": 50,
     "target": "single",
-    "power": 1.1,
-    "effects": [{ "kind": "dot", "value": 6, "duration": 3, "chance": 0.8 }]
+    "power": 0.9,
+    "effects": [
+      {
+        "kind": "dot",
+        "value": 6,
+        "duration": 3,
+        "chance": 0.8
+      }
+    ]
   }
 ]

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { createConfigRepo } from '@petbattle/core';
+
+import { runBattleBatch } from '../src/battle.js';
+import { runBreedingBatch } from '../src/breeding.js';
 import { loadConfig } from '../src/config.js';
+import { runEconomyCurve } from '../src/economy.js';
 import { parseArgs } from '../src/main.js';
 import { SIM_BEGIN, SIM_END, applySimSection } from '../src/report.js';
 import { mulberry32, createRng } from '../src/rng.js';
@@ -86,5 +91,53 @@ describe('报告段落替换', () => {
     expect(next).toContain('new');
     expect(next).not.toContain('old');
     expect(next.startsWith('# T')).toBe(true);
+  });
+});
+
+describe('sim 与 core 集成', () => {
+  const config = loadConfig();
+  const cfg = createConfigRepo(config);
+
+  it('批量战斗有分关结果，且大招间隔可测', () => {
+    const metrics = runBattleBatch(cfg, config, { battlesPerStage: 20, seed: 5 });
+    expect(metrics.status).toBe('ok');
+    expect(metrics.perStage.map((stage) => stage.stageId)).toEqual([
+      'stage_1',
+      'stage_2',
+      'stage_3',
+      'stage_4',
+      'stage_5',
+    ]);
+    expect(metrics.battles).toBe(100);
+    expect(metrics.drawRate).toBeLessThan(0.05);
+    expect(metrics.invalidNumbers).toBe(0);
+    expect(metrics.avgUltimateInterval).toBeGreaterThan(0);
+  });
+
+  it('近亲实验真的构造了 3 代内共同祖先', () => {
+    const stats = runBreedingBatch(cfg, config, { samples: 30, seed: 99 });
+    expect(stats.status).toBe('ok');
+    expect(stats.ancestorVerified).toBe(true);
+    expect(stats.randomInbredRate).toBe(0);
+    expect(stats.inbredRate).toBe(1);
+    expect(stats.controlInbredRate).toBe(0);
+    expect(stats.inbred).not.toBeNull();
+    expect(stats.control).not.toBeNull();
+    expect(stats.inbred!.gene.mean.hp).toBeLessThan(stats.control!.gene.mean.hp);
+    expect(stats.invalidNumbers).toBe(0);
+  });
+
+  it('7 天曲线无负值、无 NaN，离线封顶生效', () => {
+    const curve = runEconomyCurve(cfg, config, 7);
+    expect(curve.status).toBe('ok');
+    expect(curve.hasNegativeValues).toBe(false);
+    expect(curve.offlineCapVerified).toBe(true);
+    expect(curve.offlineCapRatio).toBeLessThan(1.2);
+    for (const point of curve.points) {
+      expect(Number.isFinite(point.coin)).toBe(true);
+      expect(Number.isFinite(point.food)).toBe(true);
+      expect(Number.isFinite(point.geneDust)).toBe(true);
+      expect(point.coin).toBeGreaterThanOrEqual(0);
+    }
   });
 });
