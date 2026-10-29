@@ -1,5 +1,5 @@
 {
-  "startingResources": { "coin": 200, "food": 50, "geneDust": 0 },
+  "startingResources": { "coin": 300, "food": 60, "geneDust": 0 },
   "releaseRefund": {
     "base": 5,
     "perLevel": 2,
