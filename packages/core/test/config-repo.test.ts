@@ -15,8 +15,10 @@ function fixtureData(): ConfigData {
 
 describe('createConfigRepo（DOMAIN §2.8，C-04）', () => {
   it('加载样例配置并暴露 contentVersion 与全部索引', () => {
-    const repo = createConfigRepo(fixtureData());
-    expect(repo.contentVersion).toBe('0.1.0');
+    const fixture = fixtureData();
+    const repo = createConfigRepo(fixture);
+    // 不写死版本号：contentVersion 随 D 的内容变更递增（CONTRACT §6.2）。
+    expect(repo.contentVersion).toBe(fixture.contentVersion);
     expect(repo.species('turtle').name).toBe('龟');
     expect(repo.element('fire').name).toBe('火');
     expect(repo.skill('normal_strike').kind).toBe('normal');
@@ -134,9 +136,11 @@ describe('ConfigRepo：工具函数', () => {
   });
 
   it('breeding/economy 返回配置原文', () => {
-    const repo = makeRepo();
+    const fixture = fixtureData();
+    const repo = createConfigRepo(fixture);
     expect(repo.breeding().inbreeding.generations).toBe(3);
-    expect(repo.economy().startingResources).toEqual({ coin: 200, food: 50, geneDust: 0 });
+    // 初始资源由 D 调参，测试对照 fixture，不写死数值。
+    expect(repo.economy().startingResources).toEqual(fixture.economy.startingResources);
   });
 
   it('对同一份数据重复构造结果一致', () => {

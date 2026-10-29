@@ -96,22 +96,21 @@ describe('createCoreAdapter', () => {
     expect(adapter.degraded).toBe(true);
   });
 
-  it('配置仓库可用但 core 仍是契约桩：允许降级', () => {
+  it('配置仓库可用且 core 已实现：正常推进，不降级', () => {
     const adapter = createCoreAdapter({
       allowStub: true,
       logger: silentLogger,
       configRepo: {} as ConfigRepo,
     });
+    // 空存档不需要查配置表；A 交付后 core 不再抛 CoreNotImplementedError。
     const result = adapter.advanceProfile(profile, 900);
-    expect(result.degraded).toBe(true);
+    expect(result.degraded).toBe(false);
+    expect(result.profile.lastEvaluatedAt).toBe(900);
   });
 
-  it('strict 模式把未实现暴露为 CoreNotImplementedError', () => {
-    const adapter = createCoreAdapter({
-      allowStub: false,
-      logger: silentLogger,
-      configRepo: {} as ConfigRepo,
-    });
+  it('strict 模式下配置仓库不可用直接抛出，不静默降级', () => {
+    const adapter = createCoreAdapter({ allowStub: false, logger: silentLogger });
     expect(() => adapter.advanceProfile(profile, 900)).toThrow(CoreNotImplementedError);
+    expect(adapter.degraded).toBe(false);
   });
 });

@@ -51,6 +51,10 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
     advanceProfile(profile, now) {
       const repo = options.configRepo;
       if (repo === undefined) {
+        // strict 模式必须暴露失败，不能静默降级（CONTRACT §8.3：生产不允许假推进）。
+        if (!options.allowStub) {
+          throw new CoreNotImplementedError('createConfigRepo（配置仓库不可用）');
+        }
         warnOnce('配置仓库不可用（createConfigRepo 尚未实现或配置目录缺失）');
         return { profile, patch: identityPatch(profile, now), degraded: true };
       }

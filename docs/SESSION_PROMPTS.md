@@ -9,16 +9,23 @@
 
 ---
 
-## 0. 现在可以同时跑几个？
+## 0. 当前进度与并行数量
 
-**3 个：A（核心）、C（服务端）、D（内容）。**
+**首批已合并**（2026-10-29）：A 的 core 实现、D 的内容/sim、C 的 guest 登录/profile/revision/幂等/Postgres 全部进入 `main`，246 个测试、lint、validate、Postgres 冒烟通过。
 
-- **B（客户端）** 需要先装 Cocos Creator 3.x LTS；本机目前没有，装好后作为第 4 个会话加入。
-- **E（美术）** 本轮暂停：废稿已删除，M0/M1 用占位图，不占并行名额。
-- 上限保持 **4 个**（COLLABORATION §1 建议 4~5，超过后合并和 review 会变成瓶颈）。
-- 同一时间只允许一个会话开 Cocos Creator；`pnpm install` 不要并行跑（本轮已由 Lead 预装好 4 个 worktree）。
+接下来可以并行：
 
-三个会话的依赖关系：A 无前置；D 依赖已冻结的 schema；C 先做登录/存档/幂等，领域计算等 A 交付后再接。三者互不阻塞。
+| 会话 | 状态 | 下一步 |
+|---|---|---|
+| A | 已完成首批，**还差 `createPet`** | 按 §6 追加任务补齐；它阻塞 D 的批量模拟和 C 的初始 3 只宠物 |
+| D | 已完成首批 | 等 `createPet` 后跑真实批量模拟，产出 BALANCE 报告 |
+| C | 已完成首批 | 等 `createPet` 后接初始存档；继续栖息地/宠物端点 |
+| B | **Cocos Dashboard 已装，但没有编辑器版本** | 在 Dashboard 里安装 3.x LTS，然后按 §4 开工 |
+| E | 暂停 | 美术不参与本轮 |
+
+- 可同时跑 **3~4 个**（A、D、C，加 B 装好编辑器后）；上限 4（COLLABORATION §1）。
+- 同一时间只允许一个会话开 Cocos Creator；`pnpm install` 不要并行跑。
+- 当前契约版本 **contract-v1.1**（新增 `BASE_REVISION_HEADER`，兼容）。
 
 ---
 
@@ -233,11 +240,14 @@ app 层禁止直接调 wx.*，统一走 platform adapter（ESLint 已配置）�
 
 | 项 | 状态 |
 |---|---|
-| `main` 有 `contract-v1` tag | ✅ |
+| `main` 有 `contract-v1` / `contract-v1.1` tag | ✅ |
 | 4 个 worktree 与分支已创建 | ✅（core / server / content / client） |
-| 每个 worktree 已 `pnpm install --frozen-lockfile` | ✅（串行安装，未改 lockfile） |
+| 每个 worktree 已 `pnpm install --frozen-lockfile` | ✅（串行安装） |
 | 废稿美术已删除 | ✅ |
-| `@vitest/coverage-v8` 已加入，`pnpm test:coverage` 可用 | ✅ |
+| `@vitest/coverage-v8`、`pg` 已加入 | ✅ |
+| M1 首批 A/C/D 已合并、246 测试全绿 | ✅ |
+| A 的 `createPet` 追加任务 | ❌ 待做（见 §6） |
+| B 的 Cocos 编辑器版本 | ❌ Dashboard 已装，编辑器未装 |
 
 每个会话开工先跑：
 
@@ -249,8 +259,41 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 
 ---
 
-## 6. 变更记录
+## 6. A 追加任务：实现 `createPet`
+
+工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开始前先 `git merge main` 把首批合并结果同步进来。
+
+```
+你继续负责 PetBattle 的 A 核心领域会话，这次只补一个函数：createPet。
+
+工作目录：D:\github-mine\petbattle-core（分支 wt/core）。先 git merge main，再开工。
+只改：packages/core/src/**（除 config/data）、packages/core/test/**、docs/DOMAIN_MODEL.md。
+不要改：packages/core/src/index.ts、constants.ts、config/schema.ts、config/types.ts、
+        packages/protocol/**、server/**、client/**、根配置。
+
+背景：首批实现已合入 main，但 createPet 仍是 CoreNotImplementedError 桩
+（packages/core/src/api.ts 与 test/contract.test.ts 各留了一处）。
+它阻塞 D 的批量模拟（初始队伍）和 C 的初始 3 只宠物。
+
+任务：
+1. 按 DOMAIN_MODEL §3/§5.1/§8.2 实现 createPet(input, cfg)：
+   - 校验 speciesId/elementId 存在、level 1~20、基因 0~100 取整；
+   - stage 固定为 'egg'，stageChangedAt = bornAt = now；
+   - fertility.readyAt = now + hatchMs + juvenileMs，cooldownUntil = 0，
+     penalty 取 input（默认 0）；
+   - condition 初始 { hunger:100, mood:100, hygiene:100, health:100 }；
+   - traits/hiddenTraits 去重；parents/ancestors 缺省为空；revision 相关字段不在这里处理。
+2. 删除 contract.test.ts 里 createPet 的桩用例，新增 create-pet.test.ts 覆盖：
+   正常建体、未知物种/属性抛错、等级/基因边界、蛋阶段与 readyAt。
+3. 跑 pnpm typecheck && pnpm test && pnpm lint && pnpm test:coverage（core 行覆盖率仍 ≥85%）。
+4. 汇报按 AGENTS.md §7；不要自己合并到 main。
+
+契约：签名不变（CONTRACT §5.3）；如果发现 input 字段不够，按 CONTRACT §9.3 提变更请求，不要私自加导出。
+```
+
+## 7. 变更记录
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
 | v1.0 | 2026-10-29 | 初版：A/C/D/B 四份启动提示词；并行数量与前置条件 |
+| v1.1 | 2026-10-29 | 首批合并后更新状态；新增 A 的 createPet 追加任务；B 的 Cocos 编辑器仍未安装 |

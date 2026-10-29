@@ -41,7 +41,7 @@
 
 - 文档版本：v1.3（新增 `docs/CONTRACT.md`，contract-v1 已冻结）。
 - M0 契约：`contract-v1` 冻结于 2026-10-28；仓库骨架、protocol/core 公共契约、配置校验、server Hello、CI 已就绪。
-- 并行（2026-10-29）：A/C/D 可同时开工；B 需先装 Cocos Creator；美术暂停，废稿已删除。启动提示词见 `SESSION_PROMPTS.md`。
+- 并行（2026-10-29）：A/C/D 首批已合入 main（246 测试、Postgres 冒烟通过）；A 还差 `createPet`；B 需先在 Cocos Dashboard 安装 3.x 编辑器；美术暂停。启动提示词见 `SESSION_PROMPTS.md`。
 - 已定：Demo 免费、像素风、MVP 物种 5 种（龟/鱼/青蛙/猫/蛇）、宠物不死亡可放生、不做主动治疗、性别保留、简体中文、2C2G Demo 服务器、不做转生、实时房间后置、交易后做。
 - 仍待定：正式版商业模式、Steam 首发地区、交易形态、扩容阈值。
 - 下一步：B 会话创建 Cocos 工程（本机无 Cocos，`client/README.md` 已说明）；A 按 `docs/CONTRACT.md` §8.1 补齐 core 实现。

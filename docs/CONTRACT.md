@@ -101,7 +101,7 @@ interface ApiResponse<T> {
 ```
 
 - 成功用 `ApiSuccess<T>`，失败用 `ApiFailure`（联合写法见 `src/api.ts`）。
-- 写操作必须带 header `Idempotency-Key`（常量 `IDEMPOTENCY_KEY_HEADER`），并带 `baseRevision`。
+- 写操作必须带 header `Idempotency-Key`（常量 `IDEMPOTENCY_KEY_HEADER`）和 `X-Base-Revision`（常量 `BASE_REVISION_HEADER`），后者携带客户端上次看到的 `profile.revision`。
 - `revision` 不匹配返回 `REVISION_CONFLICT`，`details` 为 `RevisionConflictDetails { latestProfile, latestRevision }`，客户端拉全量重建。
 - 协议版本 header：`X-Protocol-Version`（`PROTOCOL_VERSION_HEADER`）。
 - 路径参数（`:id`）放 URL，不放 body；`ApiContract` 里这些端点的 `request` 为 `void` 或只含 body 字段。
@@ -154,6 +154,8 @@ interface ApiResponse<T> {
 | 变更 | 版本动作 |
 |---|---|
 | 新增可选字段 / 新端点 | 兼容；`contract-v1.x`，`PROTOCOL_VERSION` 仍为 `v1` |
+
+- **contract-v1.1（2026-10-29）**：新增 `BASE_REVISION_HEADER` 常量（C 实现 `/profile/rename` 时需要的写操作头）。兼容变更，端点与 DTO 不变。
 | 删除/重命名字段、改语义、改必填性 | 不兼容；升 `v2`，新建 `docs/CONTRACT-v2.md`，双版本过渡 |
 | 错误码新增 | 兼容；只增不改 |
 
@@ -299,7 +301,9 @@ contentVersion: string
 
 ### 8.3 C：服务端（`server/**`）
 
-现状：`GET /health` 返回 `{ ok, serverTime, protocolVersion }`，其余 404。
+现状（M1 首批已合入 main）：`GET /health`、`POST /auth/guest`、`POST /auth/refresh`、`GET /profile`、`POST /profile/rename`。
+写操作统一走「鉴权 → Idempotency-Key → X-Base-Revision → core 推进 → revision CAS 落库 → patch」；
+Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式依赖（原先的临时桥已删除）。其余端点仍返回 404。
 
 - 所有响应套 `ApiResponse<T>`；写操作校验 `Idempotency-Key` + `baseRevision`；冲突返回 409 + 最新快照。
 - 复用 `@petbattle/core` 计算，不重写战斗/繁殖/时间规则。
@@ -374,11 +378,14 @@ contentVersion: string
 3. **排行榜指标口径**：`bestGene` 取四项均值、图鉴数量是否含未拥有剪影，待 D/C 定。
 4. **好友互访的每日上限与偷取比例**：Phase 2，接口已冻结，规则后定。
 5. **`pnpm build` 产物形态**：M0 仅 typecheck；A 用 esbuild 出 core/protocol，C 用 Docker 出 server，M1 补。
-6. **协议增量**：`GetProfileQuery.sinceRevision` 返回 patch 还是全量档，M0 未实现，C 实现时二选一并写进本文。
+6. ~~协议增量~~：**已定**为返回全量档（C 在 `ONLINE_DESIGN.md` §16.6 记录）；只有客户端出现明确的流量/延迟问题时再加增量 patch。
+7. **`createPet` 仍为契约桩**：A 首批实现了 RNG/配置/属性/时间/繁殖/放生/战斗，但没有实现建体函数。它阻塞 D 的批量模拟（初始队伍）和 C 的初始 3 只宠物；追加任务见 `SESSION_PROMPTS.md` §6。不改变 contract-v1 的签名。
 
 ---
 
-## 11. 验收记录（2026-10-28，contract-v1）
+## 11. 验收记录
+
+### 11.1 contract-v1（2026-10-28）
 
 | 项 | 命令 | 结果 |
 |---|---|---|
@@ -393,8 +400,22 @@ contentVersion: string
 | 客户端 wx | ESLint 规则 | 已配置；`client/assets/scripts/app` 目前为空 |
 | tag | `git tag contract-v1` | 见仓库 |
 
+### 11.2 M1 首批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| A 核心 | 165 测试；`packages/core/src` 行覆盖率 99.27%；同种子事件流一致；同速中立 |
+| D 内容 | contentVersion 0.2.0；18 特质；5 关；`validate:config` 通过；sim 静态检查 12/12 |
+| C 服务端 | 246 总测试；guest 登录幂等、profile 读写、409 + 最新快照、缺幂等头 400 |
+| 合并后 | `typecheck / test（246） / lint / validate:config` 全绿 |
+| Postgres | 迁移应用；重启后同 device 仍读到 revision=1 的同一存档 |
+| 真实 core | server 日志无降级；`advanceProfile` 正常推进 |
+| 已知缺口 | `createPet` 未实现，D 的批量战斗/经济/繁殖仅静态检查；C 新档为空档 |
+| 契约补口 | `BASE_REVISION_HEADER` 进 protocol；`pg` 进 server 依赖；strict 模式不再静默降级 |
+
 ## 12. 变更记录
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
 | contract-v1 | 2026-10-28 | 首次冻结：workspace/CI、protocol v1、core 公共契约、配置 schema 与样例、server Hello、接手点与变更流程 |
+| contract-v1.1 | 2026-10-29 | 兼容补充：`BASE_REVISION_HEADER`；记录 M1 首批集成结果与 `createPet` 缺口 |

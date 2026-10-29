@@ -448,6 +448,32 @@
 
 ---
 
+## 2.3 2026-10-29 M1 首批集成补记
+
+### P-042 测试写死配置数值，D 一调参就全红
+
+- **日期**：2026-10-29
+- **发现者/会话**：0 Lead（集成合并时）
+- **范围**：core / content
+- **现象**：A 的 `config-repo.test.ts` 断言 `contentVersion === '0.1.0'`、初始资源 `{coin:200,food:50}`。D 把内容升到 0.2.0、初始资源调成 300/60 后，A×D 合并测试失败 2 条，但两边代码都没错。
+- **原因**：测试把“样例数据”当成“契约常量”。契约冻结的是结构、公式、范围，不是 D 的调参数值。
+- **规避**：测试对配置的断言一律对照 fixture 本身（`expect(repo.contentVersion).toBe(fixture.contentVersion)`），只写死必须稳定的语义（物种数、技能数、相性方向）。数值断言放 D 的 sim/BALANCE，不放 core 单测。
+- **验证**：`pnpm test` 在 contentVersion 0.2.0 下 246 条全绿；D 再调数值不需要改 core 测试。
+- **关联**：`packages/core/test/config-repo.test.ts`、`docs/CONTRACT.md` §6.2、P-106。
+
+### P-043 `strict` 分支漏判，静默降级掩盖失败
+
+- **日期**：2026-10-29
+- **发现者/会话**：0 Lead（集成合并时）
+- **范围**：server
+- **现象**：C 的 `CoreAdapter` 在“配置仓库不可用”分支直接降级，没有检查 `allowStub`；即使 `PETBATTLE_CORE_STUB=strict`，服务端仍静默恒等推进，线上会表现为“写成功但数据没变”。
+- **原因**：降级逻辑分两个出口（无配置仓库 / core 抛未实现），只有一个出口判断了 strict。
+- **规避**：所有降级出口统一先判 `allowStub`；strict 下抛 `CoreNotImplementedError`，由统一错误映射返回 501。降级必须留日志，不允许无声。
+- **验证**：`server/test/domain.test.ts` 覆盖 strict + 无配置仓库 → 抛错；真实 core 下 `degraded=false`，日志无“降级”。
+- **关联**：`server/src/domain/core-adapter.ts`、`docs/CONTRACT.md` §8.3、P-107。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -528,3 +554,4 @@
 | v1.0 | 2026-10-27 | 初版：设计阶段已修正坑 + 实施高风险 + 领域检查清单 |
 | v1.1 | 2026-10-28 | 追加 P-031~P-037（评审补记）；红线补 MVP 物种 5 种 |
 | v1.2 | 2026-10-28 | 追加 P-038~P-041（M0 契约冻结补记：配置序列化、类型单一来源、NodeNext 扩展名、exports 指向源码） |
+| v1.3 | 2026-10-29 | 追加 P-042/P-043（M1 首批集成：测试写死配置数值、strict 降级漏判） |
