@@ -18,8 +18,8 @@
 | 会话 | 状态 | 下一步 |
 |---|---|---|
 | A | **第二批已完成并合入 main**（createPet/applyExp + v1.2） | 等 D 的平衡反馈；下一批可做 A 报告里列出的剩余项 |
-| D | 首批已完成 | **已解锁**：跑 `pnpm sim --write`，按 BALANCE §2 调胜率/回合数/资源曲线 |
-| C | 首批已完成 | **已解锁**：用 `createPet` 建初始 3 只；接栖息地/宠物端点 |
+| D | 首批已完成，第二批待做 | 按 §3：分关平衡 + 补栖息地字段 + 修近亲对照 |
+| C | 首批已完成，第二批待做 | 按 §2：真实初始档 + 宠物 rename/lock/release + 编队 |
 | B | **Cocos Creator 3.8.8 已装**（`C:\ProgramData\cocos\editors\Creator.8.8`） | 按 §4 开工 |
 | E | 暂停 | 美术不参与本轮 |
 
@@ -82,105 +82,110 @@
 
 ---
 
-## 2. C —— 服务端
+## 2. C —— 服务端（第二批：初始档 + 宠物操作）
 
-工作目录：`D:\github-mine\petbattle-server`（分支 `wt/server`）
+工作目录：`D:\github-mine\petbattle-server`（分支 `wt/server`）。开工前先 `git merge main`（当前 `main` 为 `contract-v1.2`，core 已无桩）。
 
 ```
-你负责 PetBattle 的 C 服务端会话。
+你继续负责 PetBattle 的 C 服务端会话，做第二批。
 
-工作目录：D:\github-mine\petbattle-server（分支 wt/server，基于 main 的 contract-v1）。
-只改：server/**。
-不要改：packages/**、client/**、tools/**、根配置、packages/protocol/**、
-        docs/PRD.md、docs/TECH_DESIGN.md、docs/CONTRACT.md。
-你可以改：docs/ONLINE_DESIGN.md（实现细节）。
+工作目录：D:\github-mine\petbattle-server（分支 wt/server）。
+开工前先 git merge main（当前 main d57c66d / contract-v1.2，core 已无桩）。
+只改：server/**、docs/ONLINE_DESIGN.md。
+不要改：packages/**、client/**、tools/**、根配置、packages/protocol/**、docs/CONTRACT.md。
 
-开工前按顺序读：
-1. AGENTS.md
-2. docs/CONTRACT.md §4（协议清单）、§7、§8.3（你的接手点）、§9（变更流程）、§10 未决项 2/6
-3. docs/ONLINE_DESIGN.md §3/§4/§5/§11/§12
-4. docs/TECH_DESIGN.md §3/§10/§11/§14/§16.1
-5. docs/PITFALLS.md P-011、P-022、P-027~P-029、P-105、P-107
-6. packages/protocol/src/**（ROUTES / ApiContract / ApiResponse / 错误码）、server/src/server.ts
+先读：
+- docs/CONTRACT.md §4（协议）、§7.1（v1.2 签名）、§8.3、§9
+- docs/ONLINE_DESIGN.md §4/§5
+- server/src/domain/{starter-profile,core-adapter,config-provider}.ts
+- packages/core/src/api.ts（createPet / releasePet / advanceProfile / applyExp 签名）
+- docs/PITFALLS.md P-029、P-042、P-043、P-046
 
-契约已冻结：端点和响应包不能改；错误码只增不改；所有写操作必须校验 Idempotency-Key + baseRevision。
-需要新端点/改响应时，按 docs/CONTRACT.md §9.3 提变更请求，不要私改 protocol。
+本批目标：新账号有真实初始档；接宠物基础操作与编队；放生按 v1.2 签名。
 
-首批任务：
-1. 框架选型（node:http 加轻量路由，或 Fastify；选一个说明理由），保留 GET /health。
-2. 统一响应与错误映射：ApiResponse<T>；CoreNotImplementedError → NOT_IMPLEMENTED，
-   TimeError → TIME_BACKWARDS，ReleaseError.reason → PET_*/LAST_ADULT 等；未知 → INTERNAL。
-3. 存储层：定义 ProfileStore 接口；先做内存实现跑测试，再做 Postgres 适配 + 迁移脚本 + docker-compose。
-   遵守 2C2G：连接池 ≤20、Node 堆 ≤1G、异步 PvP 限并发（先留接口）。
-4. 端点（首批）：POST /auth/guest（deviceId → account + token）、GET /profile、
-   POST /profile/rename；Idempotency-Key 中间件（按 accountId+key 去重，重复请求返回同一结果）；
-   baseRevision 不匹配返回 409 + RevisionConflictDetails{latestProfile, latestRevision}。
-5. 写操作的领域计算等 A 的 core 实现：先把 “加载 profile → advanceProfile → 校验 → 落库 → 返回 patch+revision”
-   的流水线搭好，core 还是 stub 时用假数据跑通契约；A 交付后直接接线，不要自己实现战斗/繁殖/时间规则。
-6. 集成测试：/health、游客登录两次同 key、profile 读写、revision 冲突、401、幂等重放。
+任务：
+1. 初始档（server/src/domain/starter-profile.ts）：
+   - 用 @petbattle/core 的 createPet 创建 3 只：水龟(turtle/water)、雷鱼(fish/thunder)、草蛙(frog/grass)；
+     基因四项 50、traits 空、generation 1、parents [null,null]。
+   - 性别固定 [male, female, male]，保证 1 公 1 母。
+   - createPet 的 now 传 `now - breeding.hatchMs - breeding.juvenileMs`，再对整档调用
+     advanceProfile(profile, now, repo)，断言三只 stage==='adult'、fertility.readyAt<=now。
+     不要在 server 里手写阶段/属性规则。
+   - currencies 用 economy.startingResources；栖息地 meadow 1 级，slots 放 3 只（第 4 格 null），
+     每只 habitatId 指向它；codex 对 3 个组合写 seen/owned、bestGene=50；
+     lineup/defense 空；revision 0，createdAt/lastEvaluatedAt=now（首次登录无离线收益）。
+   - 测试：3 只、1 公 1 母、全成年、可繁殖、栖息地槽位、codex、幂等（同 device 重复登录不重复建宠）。
+2. 宠物端点：
+   - POST /pets/:id/rename：校验归属/长度；返回 patch。
+   - POST /pets/:id/lock：locked 切换。
+   - POST /pets/:id/release：调用 core releasePet(profile, petId, now, cfg)；
+     把 ReleaseError.reason 映射到协议错误码（EGG_NOT_RELEASABLE / PET_LOCKED / PET_IN_USE / LAST_ADULT 等）；
+     返还写回 currencies；图鉴 owned 不回退；写审计日志。
+3. POST /lineup/set：最多 3、属于本人、非蛋、引用存在、去重；与 pvp/defense 不联动；
+   幼年可上阵（属性由战斗时 deriveStats 处理，不在编队接口算）。
+4. 生产默认：docker-compose 设 PETBATTLE_CORE_STUB=strict；本地 memory 模式可显式放宽。
+5. 测试：初始档、rename/lock/release（含四类拒绝与返还）、lineup 校验、revision/幂等/401 回归。
+6. 更新 docs/ONLINE_DESIGN.md §16 的端点列表与初始档说明。
 
 专项验收：
-- pnpm typecheck && pnpm test && pnpm lint 通过；server 测试覆盖上述用例。
-- docker compose up 能起 Postgres 和 server，curl /health 200（CI 不加 docker，先本地验证）。
-- 客户端只交动作：不接受客户端提交“我赢了/我获得资源”；奖励由服务器调用 core 计算。
-- 不 import client，不复制 protocol/core 类型。
+- pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config 通过。
+- server 在真实 core 下不再降级（日志无“降级”）；guest 登录后 GET /profile 有三只成年宠。
+- Postgres 路径仍可用（本地 docker 起 Postgres，跑一次登录 + 放生）。
+- 不放行“客户端提交结果”；不复制 core 规则；所有写操作幂等 + X-Base-Revision。
 
-纪律：
-- 不并行跑 pnpm install；需要依赖先报告 0 号（锁文件只有 0 号改）。
-- 不要把领域规则写进 server（P-030 同类问题）。
-- 每天报告可合并进度，由 0 号合并到 main。
-- 汇报按 AGENTS.md §7。
+不要做：栖息地喂食/清理/玩耍/升级、繁殖、战斗、PvP 端点——这些还缺 core 公共函数
+（feed/clean/play 的领域函数没有）；需要推进时按 docs/CONTRACT.md §9.3 提请求，不要自己实现规则。
+
+汇报 AGENTS.md §7，额外列出：本批用到的 core 函数、剩余端点还缺哪些 core API、是否需要 A 补函数。
 ```
 
----
+## 3. D —— 内容与数值（第二批：平衡 + 新字段）
 
-## 3. D —— 内容与数值
-
-工作目录：`D:\github-mine\petbattle-content`（分支 `wt/content`）
+工作目录：`D:\github-mine\petbattle-content`（分支 `wt/content`）。开工前先 `git merge main`（当前 `main` 为 `contract-v1.2`，sim 已可跑）。
 
 ```
-你负责 PetBattle 的 D 内容与数值会话。
+你继续负责 PetBattle 的 D 内容与数值会话，做第二批。
 
-工作目录：D:\github-mine\petbattle-content（分支 wt/content，基于 main 的 contract-v1）。
-只改：packages/core/src/config/data/**、packages/sim/**、tools/content/**。
-不要改：packages/core/src/config/schema.ts、packages/core/src/{api,constants,types}/**、
-        packages/protocol/**、client/**、server/**、根配置、docs/PRD.md、docs/CONTRACT.md。
-你可以改：docs/BALANCE.md（若创建）、docs/DOMAIN_MODEL.md 中数值说明（先与 A 打招呼）。
+工作目录：D:\github-mine\petbattle-content（分支 wt/content）。
+开工前先 git merge main（当前 main d57c66d / contract-v1.2；core 已实现 createPet，sim 可跑）。
+只改：packages/core/src/config/data/**、packages/sim/**、tools/content/**、docs/BALANCE.md。
+不要改：packages/core/src/config/schema.ts、core 其他源码、protocol、server、client、根配置、docs/CONTRACT.md。
 
-开工前按顺序读：
-1. AGENTS.md
-2. docs/CONTRACT.md §6（配置契约）、§7（C-01/C-02/C-03/C-05/C-09）、§8.4（你的接手点）
-3. docs/DOMAIN_MODEL.md §2/§8/§10
-4. docs/PRD.md §5/§11/§13.3
-5. packages/core/src/config/types.ts 与 data/*.json
-6. docs/PITFALLS.md P-002、P-017、P-024、P-033、P-036、P-106、P-108
+先读：
+- docs/CONTRACT.md §6、§7.1（D-05/D-06）、§8.4
+- docs/BALANCE.md（目标表 §2）
+- packages/core/src/config/data/*.json、packages/sim/src/**
+- docs/PITFALLS.md P-002、P-042、P-106、P-108
 
-契约已冻结：schema 与校验规则的语义不能改；JSON 里不能塞未定义字段。
-需要新字段时，按 docs/CONTRACT.md §9.3 写给 A/0 号，不要私加。
+当前 sim 结果（main d57c66d）：
+- 5000 场：总胜率 0.300、平局 0、平均 5.39 回合、大招间隔 3
+- 7 天：金币 2904 / 食物 858 / 基因尘 210
+- 1000 次繁殖：突变率 0.029、近亲比例 0
 
-首批任务：
-1. 特质扩到 15~20 条，覆盖 common/rare/epic，继承权重与稀有度匹配；不引入未定义字段。
-2. 5 关数值校准：敌方等级/基因质量、首通与重复奖励；petExp 必须满足首通 30+order×10、重复 floor(首通/3)。
-3. 经济参数：初始资源、放生返还、资源上限；检查没有负收益或死循环。
-4. 每次改 JSON 后跑 pnpm validate:config；contentVersion 递增。
-5. packages/sim：写批量模拟 CLI（先搭框架，A 的 core 实现后即可跑）：
-   - 1000+ 场对局：胜率、平均回合数、平局率、技能释放间隔（验证小技能不是每回合可放、大招约 3 回合一次）；
-   - 7 天资源曲线（在线/离线 8h 封顶）；1000 次繁殖的基因分布与近亲影响；
-   - 输出 docs/BALANCE.md（D 拥有），标注“初版，待 sim”。
-6. 保持“配置只改数据、不改公式”：发现公式问题报告 A，不要改 core。
+任务：
+1. 先跑 pnpm sim --write，确认报告按关卡输出（每关胜率/回合数/平局率）；
+   如果 sim 只汇总总数，补 per-stage 输出。
+2. 查“近亲比例 0”：检查 packages/sim/src/breeding.ts 的近亲对照组是否真的构造了 3 代内共同祖先；
+   修正后重跑。
+3. 按 BALANCE §2 调 5 关：
+   - 目标胜率：关1 ≥0.85，关2 0.70，关3 0.55，关4 0.45，关5 0.35~0.60（±0.15）；
+   - 平均回合 6~18；平局 <5%；小技能密度 <0.5；大招间隔 2.5~4.5；
+   - 只改 skills/stages/traits/economy 数据；技能成本仍守小 40~50、大 70~80。
+4. 补两个栖息地字段到 habitats.json：
+   - hungerPenaltyWhenNoFoodPerHour（建议 1~2，与食物产出/消耗一起验证不软锁）；
+   - productionStageMul { juvenile: 0.5, adult: 1, elder: 0.8 }（确认与 DOMAIN §6.1 一致）。
+5. contentVersion 升到 0.3.0；跑 pnpm validate:config。
+6. 更新 docs/BALANCE.md：分关结果、调参前后对比、结论；标注“初版，待更多样本”。
+7. 不新增未定义 JSON 字段；需要新字段先按 CONTRACT §9.3 提请求。
 
 专项验收：
-- pnpm validate:config 通过；pnpm typecheck && pnpm test && pnpm lint 通过。
-- 模拟报告有结论：胜率区间、平均回合数、资源曲线、繁殖分布；无 NaN/Infinity。
-- 关卡只使用龟/鱼/青蛙/猫/蛇；图鉴组合 25 个概念不变。
+- pnpm validate:config && pnpm typecheck && pnpm test && pnpm lint 通过。
+- pnpm sim 输出分关胜率与回合数，落在目标区间或有明确说明（例如 Boss 偏难的原因）。
+- 7 天资源曲线无 NaN/Infinity、无负值、离线封顶生效。
+- 近亲对照组非 0（如果仍为 0，说明原因并给出下一步）。
 
-纪律：
-- 不并行跑 pnpm install；不新增依赖，需要时报告 0 号。
-- 每天报告可合并进度，由 0 号合并到 main。
-- 汇报按 AGENTS.md §7。
+汇报 AGENTS.md §7，额外列出：调参前后对比、仍不达标项及原因、需要 A/C 配合的点。
 ```
-
----
 
 ## 4. B —— 客户端（装好 Cocos 后再开）
 
@@ -259,7 +264,7 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 
 ---
 
-## 6. A 第二批任务（contract-v1.2）
+## 6. A 第二批任务（contract-v1.2，已完成留档）
 
 工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开工前先 `git merge main`。
 
@@ -327,3 +332,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 | v1.2 | 2026-10-29 | §6 替换为 A 第二批任务（createPet + contract-v1.2 的 D-01~D-07） |
 | v1.3 | 2026-10-29 | 确认 Cocos Creator 3.8.8 安装路径；B 可开工 |
 | v1.4 | 2026-10-29 | A 第二批完成并合入；D/C 解锁；记录 sim 初版结果 |
+| v1.5 | 2026-10-29 | §2/§3 替换为 C/D 第二批提示词（初始档+宠物操作 / 分关平衡+新字段） |
