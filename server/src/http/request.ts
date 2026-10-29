@@ -109,11 +109,18 @@ export function requireStringField(
   return trimmed;
 }
 
-export interface ReadBodyOptions {
-  maxBytes: number;
+/** 取必填布尔字段；`"true"` 这类字符串不接受，避免客户端把语义猜错。 */
+export function requireBooleanField(source: Record<string, unknown>, key: string): boolean {
+  const value = source[key];
+  if (typeof value !== 'boolean') {
+    throw new AppError('VALIDATION_FAILED', `${key} 必须是布尔值`);
+  }
+  return value;
 }
 
-/** 读取 JSON 请求体；空体返回 `undefined`，超限抛 413。 */
+export interface ReadBodyOptions {
+  maxBytes: number;
+}/** 读取 JSON 请求体；空体返回 `undefined`，超限抛 413。 */
 export function readJsonBody(req: IncomingMessage, options: ReadBodyOptions): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];

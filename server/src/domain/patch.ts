@@ -26,7 +26,9 @@ function mergePets(base: PetsPatch | undefined, extra: PetsPatch | undefined): P
   for (const pet of base?.upsert ?? []) upsert.set(pet.id, pet);
   for (const pet of extra?.upsert ?? []) upsert.set(pet.id, pet);
   const remove = new Set<string>([...(base?.remove ?? []), ...(extra?.remove ?? [])]);
-  return { upsert: [...upsert.values()], remove: [...remove] };
+  // remove 优先：放生时 core 的推进增量可能刚好 upsert 了同一只，
+  // 若两者同时下发，客户端会看到“删了又复活”的歧义。
+  return { upsert: [...upsert.values()].filter((pet) => !remove.has(pet.id)), remove: [...remove] };
 }
 
 function mergeHabitats(
@@ -38,7 +40,10 @@ function mergeHabitats(
   for (const habitat of base?.upsert ?? []) upsert.set(habitat.id, habitat);
   for (const habitat of extra?.upsert ?? []) upsert.set(habitat.id, habitat);
   const remove = new Set<string>([...(base?.remove ?? []), ...(extra?.remove ?? [])]);
-  return { upsert: [...upsert.values()], remove: [...remove] };
+  return {
+    upsert: [...upsert.values()].filter((habitat) => !remove.has(habitat.id)),
+    remove: [...remove],
+  };
 }
 
 export function composePatch(

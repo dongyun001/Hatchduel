@@ -54,6 +54,7 @@ export function createDeps(options: CreateDepsOptions): ServerDeps {
       mutex,
       accessTokenTtlMs: options.config.accessTokenTtlMs,
       refreshTokenTtlMs: options.config.refreshTokenTtlMs,
+      configRepo: options.configRepo,
     }),
     profiles: new ProfileService({ store: options.store, core, mutex, logger }),
     idempotency: new IdempotencyService(options.store, options.config.idempotencyTtlMs, mutex),

@@ -5,12 +5,14 @@
  * “只有走完整链路才会错”的部分。
  */
 import type { ApiResponse, AuthResponse } from '@petbattle/protocol';
+import type { Profile } from '@petbattle/core';
 
 import { loadConfig } from '../src/config.js';
 import type { ServerConfig } from '../src/config.js';
 import { silentLogger } from '../src/logger.js';
 import { startServer } from '../src/server.js';
 import { InMemoryStore } from '../src/storage/memory.js';
+import { testConfigRepo } from './fixtures.js';
 
 export const TEST_TOKEN_SECRET = 'test-secret-0123456789';
 export const START_TIME = 1_700_000_000_000;
@@ -33,12 +35,15 @@ export function testConfig(overrides: Partial<ServerConfig> = {}): ServerConfig 
     ...loadConfig({}),
     tokenSecret: TEST_TOKEN_SECRET,
     pg: { connectionString: undefined, maxPoolSize: 10 },
+    // 测试与生产同口径：core 已全部实现，任何降级都应直接失败（P-043）。
+    allowCoreStub: false,
     ...overrides,
   };
 }
 
 export async function startTestServer(overrides: Partial<ServerConfig> = {}): Promise<TestHarness> {
   const store = new InMemoryStore();
+  const configRepo = await testConfigRepo();
   let now = START_TIME;
   const clock: TestClock = {
     advance: (ms) => {
@@ -55,6 +60,7 @@ export async function startTestServer(overrides: Partial<ServerConfig> = {}): Pr
     store,
     logger: silentLogger,
     clock: () => now,
+    configRepo,
   });
 
   return {
@@ -122,4 +128,27 @@ export function expectError(call: HttpCall, code: string): void {
   if (actual !== code) {
     throw new Error(`期望错误码 ${code}，实际 ${String(actual)}`);
   }
+}
+
+/** 直接读取内存存储里的权威存档（测试用来断言落库结果）。 */
+export async function loadProfile(harness: TestHarness, accountId: string): Promise<Profile> {
+  const profile = await harness.store.getProfile(accountId);
+  if (profile === undefined) throw new Error(`存档不存在：${accountId}`);
+  return profile;
+}
+
+/**
+ * 直接改写内存存档，模拟"别的系统已经把宠物移出栖息地"这类前置状态。
+ * revision 保持不变，客户端的 baseRevision 仍然有效。
+ */
+export async function replaceProfile(
+  harness: TestHarness,
+  accountId: string,
+  mutate: (profile: Profile) => Profile,
+): Promise<Profile> {
+  const current = await loadProfile(harness, accountId);
+  const next = mutate(current);
+  const saved = await harness.store.saveProfile({ ...next, revision: current.revision }, current.revision);
+  if (!saved) throw new Error('测试改写存档失败');
+  return next;
 }

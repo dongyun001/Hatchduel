@@ -21,6 +21,15 @@ const configRepo = await loadConfigRepo({
   logger,
 });
 
+// strict 模式下配置仓库不可用等于“所有领域写操作都会 501/假推进”，必须在启动时拒绝，
+// 而不是等玩家点按钮才发现（PITFALLS P-043）。
+if (!config.allowCoreStub && configRepo === undefined) {
+  logger.error('PETBATTLE_CORE_STUB=strict 但配置仓库不可用，拒绝启动', {
+    hint: '检查 packages/core/src/config/data 或设置 PETBATTLE_CONFIG_DIR',
+  });
+  process.exit(1);
+}
+
 let storeHandle;
 try {
   storeHandle = await createStore(config, logger);

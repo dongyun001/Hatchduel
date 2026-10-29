@@ -8,9 +8,21 @@
  * - 恒等推进**不伪造**任何领域结果：不改宠物、不产资源，只把 patch 的 revision/时间补齐；
  * - 可通过 `PETBATTLE_CORE_STUB=strict` 关闭降级，让未实现直接暴露为 501。
  */
-import { CoreNotImplementedError, advanceProfile as coreAdvanceProfile } from '@petbattle/core';
-import type { ConfigRepo, EpochMs, Profile, ProfilePatch } from '@petbattle/core';
+import {
+  CoreNotImplementedError,
+  advanceProfile as coreAdvanceProfile,
+  releasePet as coreReleasePet,
+} from '@petbattle/core';
+import type {
+  ConfigRepo,
+  EpochMs,
+  PetId,
+  Profile,
+  ProfilePatch,
+  ReleaseResult,
+} from '@petbattle/core';
 
+import { AppError } from '../errors.js';
 import type { Logger } from '../logger.js';
 import { identityPatch } from './patch.js';
 
@@ -23,6 +35,8 @@ export interface AdvanceResult {
 
 export interface CoreAdapter {
   advanceProfile(profile: Profile, now: EpochMs): AdvanceResult;
+  /** 放生：拒绝原因由 core 抛 `ReleaseError`，服务端按 reason 映射错误码。 */
+  releasePet(profile: Profile, petId: PetId, now: EpochMs): ReleaseResult;
   /** 是否曾经降级过；用于日志告警与运维排查。 */
   readonly degraded: boolean;
 }
@@ -47,6 +61,15 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
     });
   };
 
+  /** 放生/繁殖这类必须读配置的操作没有降级余地：没配置就直接报配置错误。 */
+  const requireRepo = (): ConfigRepo => {
+    const repo = options.configRepo;
+    if (repo === undefined) {
+      throw new AppError('CONFIG_INVALID', '配置仓库不可用，无法执行需要配置的领域操作');
+    }
+    return repo;
+  };
+
   return {
     advanceProfile(profile, now) {
       const repo = options.configRepo;
@@ -68,6 +91,10 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
         warnOnce('core.advanceProfile 尚未实现');
         return { profile, patch: identityPatch(profile, now), degraded: true };
       }
+    },
+
+    releasePet(profile, petId, now) {
+      return coreReleasePet(profile, petId, now, requireRepo());
     },
 
     get degraded() {
