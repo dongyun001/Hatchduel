@@ -469,6 +469,22 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 冒烟 | headless 浏览器 Boot→Home→Habitat，收取后金币/食物同步 |
 | 已知 | Habitat 动作仍是 mock（`DEV_CONFIG.useServer=false`）；mock profile 可改用 `createPet`；场景为手写，后续用编辑器保存 |
 
+### 11.5 A 第三批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 342 passed（26 文件）；core 行覆盖率 98.97% |
+| D-08 | 测试切到合成配置；删掉 stage_1 敌人数量断言；D 可自由调水/土系 |
+| D-09 | `autoCommand` 留能量：大招够就放，距大招 ≤20 时普攻攒能量 |
+| D-10 | `buildPveBattleSetup(party, stage, cfg, seed)` |
+| D-11 | 放生拒绝防守阵容：`ReleaseError('in_defense')` |
+| D-12 | 6 个栖息地操作函数；`careRecoveryPerAction?`（clean/play 默认 20/20） |
+| D-13 | `statMods.hit` 改为加法增量，其余比例属性仍是乘数 |
+| D-14 | `inheritance.weight` 标 reserved，MVP 不消费 |
+| 例外 | A 为保持 `Record<ReleaseErrorReason, …>` 穷尽性，在 `server/src/errors.ts` 加了唯一一行 `in_defense` 映射；0 号确认保留，后续 server 改动归 C |
+| 注意事项 | `collectHabitat` 只返回 `{profile, patch}`；`collected` 由 C 在调用前快照 `habitat.stored` 计算 |
+| 未决 | `feed/clean/play` 目前不要求宠物在栖息地（不在时用默认恢复量），是否限制为“栖息地内互动”待产品确认 |
+
 ## 12. 变更记录
 
 | 版本 | 日期 | 说明 |

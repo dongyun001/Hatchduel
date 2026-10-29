@@ -8,7 +8,7 @@
  * 实现分散在 `src/*` 与 `src/battle/*`，本文件只保留签名与转发。
  */
 import type { ConfigData, ConfigRepo, StageConfig } from './config/types';
-import type { AncestorRef, Gender, Genome, PetId, PetInstance } from './types/pet';
+import type { AncestorRef, Gender, Genome, HabitatId, PetId, PetInstance } from './types/pet';
 import type { HabitatInstance, Profile, ProfilePatch, ResourceBag } from './types/profile';
 import type { ElementId, EpochMs, Id, Rng } from './types/common';
 import type { BattleSetup, BattleUnitInit, BattleEvent, BattleState, Command } from './types/battle';
@@ -19,8 +19,16 @@ import { deriveStatsImpl } from './stats';
 import { advanceHabitatImpl, advancePetImpl, advanceProfileImpl } from './advance';
 import { breedImpl, checkBreedingImpl, isInbredImpl } from './breeding';
 import { releasePetImpl } from './release';
+import {
+  cleanPetImpl,
+  collectHabitatImpl,
+  feedPetImpl,
+  movePetToHabitatImpl,
+  playWithPetImpl,
+  upgradeHabitatImpl,
+} from './habitat-ops';
 import { createPetImpl } from './pet';
-import { buildBattleSetupImpl, buildEnemyTeamImpl } from './battle/setup';
+import { buildBattleSetupImpl, buildEnemyTeamImpl, buildPveBattleSetupImpl } from './battle/setup';
 import {
   autoCommandImpl,
   availableCommandsImpl,
@@ -223,6 +231,74 @@ export function releasePet(
 }
 
 /**
+ * 栖息地操作（contract-v1.3 D-12）。统一返回 `{ profile, patch }`；
+ * `patch` 的 `fromRevision` 与 `toRevision` 都等于输入 `profile.revision`，由服务端统一 +1。
+ * 失败抛 `Error`（`name = 'HabitatError'`，带 `code`，见 DOMAIN_MODEL §15.7）。
+ */
+
+/** 放入 / 移出栖息地；`habitatId = null` 表示移出。 */
+export function movePetToHabitat(
+  profile: Profile,
+  petId: PetId,
+  habitatId: HabitatId | null,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): { profile: Profile; patch: ProfilePatch } {
+  return movePetToHabitatImpl(profile, petId, habitatId, now, cfg);
+}
+
+/** 喂食：扣 `FoodConfig.cost`，恢复 hunger / mood。 */
+export function feedPet(
+  profile: Profile,
+  petId: PetId,
+  foodId: Id,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): { profile: Profile; patch: ProfilePatch } {
+  return feedPetImpl(profile, petId, foodId, now, cfg);
+}
+
+/** 清洁：恢复 hygiene（默认 +20），不消耗资源。 */
+export function cleanPet(
+  profile: Profile,
+  petId: PetId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): { profile: Profile; patch: ProfilePatch } {
+  return cleanPetImpl(profile, petId, now, cfg);
+}
+
+/** 陪玩：恢复 mood（默认 +20），不消耗资源。 */
+export function playWithPet(
+  profile: Profile,
+  petId: PetId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): { profile: Profile; patch: ProfilePatch } {
+  return playWithPetImpl(profile, petId, now, cfg);
+}
+
+/** 升级栖息地：扣配置成本、扩容量、重算 slots。 */
+export function upgradeHabitat(
+  profile: Profile,
+  habitatId: HabitatId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): { profile: Profile; patch: ProfilePatch } {
+  return upgradeHabitatImpl(profile, habitatId, now, cfg);
+}
+
+/** 领取产出：`stored` 转入 `currencies`（货币取整，零头留在 stored）。 */
+export function collectHabitat(
+  profile: Profile,
+  habitatId: HabitatId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): { profile: Profile; patch: ProfilePatch } {
+  return collectHabitatImpl(profile, habitatId, now, cfg);
+}
+
+/**
  * 用个体快照构建 3v3 战斗输入。`teams[0]` 为主队/攻方，`teams[1]` 为敌方/守方。
  * uid 由本函数生成（"a0"/"b0"）；不读全局状态；同一输入必须得到同一输出。
  */
@@ -245,6 +321,19 @@ export function buildEnemyTeam(
   seed: number,
 ): BattleUnitInit[] {
   return buildEnemyTeamImpl(stage, cfg, seed);
+}
+
+/**
+ * PvE 战斗输入（contract-v1.3 D-10）：`team0` = 玩家队伍（uid `a*`），
+ * `team1` = 关卡敌方（uid `b*`）。同一 `(party, stage, seed)` 必然得到同一输出。
+ */
+export function buildPveBattleSetup(
+  party: readonly PetInstance[],
+  stage: StageConfig,
+  cfg: ConfigRepo,
+  seed: number,
+): BattleSetup {
+  return buildPveBattleSetupImpl(party, stage, cfg, seed);
 }
 
 /**

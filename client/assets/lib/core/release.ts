@@ -68,6 +68,8 @@ export function releasePetImpl(
   if (pet.stage === 'egg') throw new ReleaseError('cannot_release_egg');
   if (pet.locked) throw new ReleaseError('pet_locked');
   if (profile.lineup.includes(petId)) throw new ReleaseError('in_lineup');
+  // 防守阵容里的宠物同样不能放生，否则会留下悬空 id（contract-v1.3 D-11）。
+  if (profile.pvp.defense.includes(petId)) throw new ReleaseError('in_defense');
 
   const inHabitat =
     pet.habitatId != null ||

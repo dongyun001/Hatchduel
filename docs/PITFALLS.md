@@ -570,6 +570,21 @@
 
 ---
 
+## 2.6 2026-10-29 A 第三批反馈
+
+### P-049 模拟器自带 AI 与 core `autoCommand` 漂移
+
+- **日期**：2026-10-29
+- **发现者/会话**：A 核心 / 0 Lead
+- **范围**：sim / core
+- **现象**：A 改了 `autoCommand` 的留能量策略，但 `pnpm sim` 的 5000 场结果（0.598 / 6.14 回合 / 大招间隔 2.94）一字未变。原因是 `packages/sim/src/battle.ts` 用自己的 `pickCommand`，没有调用 `BattleEngine.autoCommand`。
+- **原因**：sim 把自己定位成“玩家策略”，core 的 AI 是“自动战斗/防守 AI”，两套策略各自演化。
+- **规避**：BALANCE 报告必须写明该曲线由哪套策略产生；需要评估自动战斗/PvP 防守时应改用 `engine.autoCommand`，或同时输出两套结果。不要让“改了 AI 但数字没变”被误读为 AI 无效。
+- **验证**：`pnpm sim` 增加 `--ai=core|sim`（或两列并排）；同一 seed 下两套策略的结果可对比。
+- **关联**：`packages/sim/src/battle.ts`、`packages/core/src/battle/engine.ts`、`docs/BALANCE.md`。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -654,3 +669,4 @@
 | v1.4 | 2026-10-29 | 追加 P-044~P-046（A 首批实现反馈：比例属性取整、状态衰减归属、契约缺落库出口） |
 | v1.5 | 2026-10-29 | 追加 P-047/P-048（D/C 第二批：patch 同 id 冲突、栖息地无移出入口） |
 | v1.6 | 2026-10-29 | 追加 P-113~P-115（B 客户端：手写场景 class id、spriteFrame 重置尺寸、设计分辨率与相机竞争） |
+| v1.7 | 2026-10-29 | 追加 P-049（sim 自带 AI 与 core autoCommand 漂移） |

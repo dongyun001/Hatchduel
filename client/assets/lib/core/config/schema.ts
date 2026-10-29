@@ -580,6 +580,15 @@ function validateHabitats(c: Collector, value: unknown, ids: Set<string>): void 
     readInt(c, item, 'healthRecoveryPerHour', p, 0);
     // contract-v1.2 D-05/D-06：可选字段，缺省时按 DOMAIN §6.1 的默认值结算。
     readOptionalNumber(c, item, 'hungerPenaltyWhenNoFoodPerHour', p, 0);
+    const care = item['careRecoveryPerAction'];
+    if (care !== undefined) {
+      if (!isRecord(care)) {
+        c.add(join(p, 'careRecoveryPerAction'), 'invalid_type', 'careRecoveryPerAction 需要对象');
+      } else {
+        readOptionalNumber(c, care, 'clean', join(p, 'careRecoveryPerAction'), 0);
+        readOptionalNumber(c, care, 'play', join(p, 'careRecoveryPerAction'), 0);
+      }
+    }
     const stageMul = item['productionStageMul'];
     if (stageMul !== undefined) {
       if (!isRecord(stageMul)) {

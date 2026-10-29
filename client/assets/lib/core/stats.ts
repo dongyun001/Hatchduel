@@ -9,7 +9,8 @@
  * ```
  *
  * - `levelMul / stageMul / geneMul / affinityMul` 只作用于 hp/atk/def/spd；
- * - `crit / critDmg / hit / dodge` 只乘 `condMul / traitMul / passiveMul`；
+ * - `crit / critDmg / dodge` 只乘 `condMul / traitMul / passiveMul`；
+ * - `hit` 的 `statMods` 是**加法增量**（D-13）：`(base.hit + Σ mods) × condMul`，再 clamp ±0.5；
  * - 取整只在最后一步；比例类属性（crit/critDmg/hit/dodge）保留 4 位小数后 clamp，
  *   否则 `floor(0.05 × 1.06) = 0` 会把暴击率抹平（DOMAIN §1「倍率保留 4 位小数」）。
  * - 蛋阶段不参与战斗，全部返回 0。
@@ -74,6 +75,16 @@ function productMod(mods: readonly StatMods[], key: StatKey): number {
   return mul;
 }
 
+/** `hit` 是加法增量（contract-v1.3 D-13）：+0.02 就是命中率 +2 个百分点。 */
+function sumMods(mods: readonly StatMods[], key: StatKey): number {
+  let sum = 0;
+  for (const mod of mods) {
+    const value = mod[key];
+    if (value !== undefined) sum += value;
+  }
+  return sum;
+}
+
 export function computeStats(input: ComputeStatsInput): StatBlock {
   if (input.stage === 'egg') return { ...ZERO_STATS };
 
@@ -115,12 +126,9 @@ export function computeStats(input: ComputeStatsInput): StatBlock {
       productMod(input.traitMods, 'critDmg') *
       productMod(input.passiveMods, 'critDmg'),
   );
-  const hit = round4(
-    input.base.hit *
-      condMul *
-      productMod(input.traitMods, 'hit') *
-      productMod(input.passiveMods, 'hit'),
-  );
+  // hit 以加法增量叠加（D-13），其余比例属性仍是乘数。
+  const hitAdd = sumMods(input.traitMods, 'hit') + sumMods(input.passiveMods, 'hit');
+  const hit = round4((input.base.hit + hitAdd) * condMul);
   const dodge = round4(
     input.base.dodge *
       condMul *
