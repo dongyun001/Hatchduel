@@ -5,6 +5,9 @@ import type { ApiErrorCode } from './errors.js';
 /** 所有写操作必须携带的幂等头。 */
 export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
 
+/** 写操作的乐观锁版本头：客户端携带上次看到的 `profile.revision`。 */
+export const BASE_REVISION_HEADER = 'X-Base-Revision';
+
 /** 客户端声明自己使用的协议版本；服务端不匹配时返回 400/升级提示。 */
 export const PROTOCOL_VERSION_HEADER = 'X-Protocol-Version';
 

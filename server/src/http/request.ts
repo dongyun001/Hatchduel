@@ -2,19 +2,18 @@
  * 请求解析与校验：header 约定、JSON 体读取、字段校验。
  *
  * - 鉴权：`Authorization: Bearer <accessToken>`。
- * - 写操作：`Idempotency-Key`（protocol 常量）+ `baseRevision`。
- *
- * 注意：`baseRevision` 的 header 名尚未进 `@petbattle/protocol`（见 docs/ONLINE_DESIGN.md
- * “待补契约”），此处先用服务端常量；0 号补 `BASE_REVISION_HEADER` 后替换为 import。
+ * - 写操作：`Idempotency-Key` + `X-Base-Revision`（都是 protocol 常量）。
  */
 import type { IncomingMessage } from 'node:http';
 
-import { IDEMPOTENCY_KEY_HEADER, PROTOCOL_VERSION, PROTOCOL_VERSION_HEADER } from '@petbattle/protocol';
+import {
+  BASE_REVISION_HEADER,
+  IDEMPOTENCY_KEY_HEADER,
+  PROTOCOL_VERSION,
+  PROTOCOL_VERSION_HEADER,
+} from '@petbattle/protocol';
 
 import { AppError } from '../errors.js';
-
-/** 写操作的 profile 版本头；协议里只写“并带 baseRevision”，未固化名字。 */
-export const BASE_REVISION_HEADER = 'X-Base-Revision';
 
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 

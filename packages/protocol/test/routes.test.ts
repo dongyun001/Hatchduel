@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   API_ERROR_CODES,
+  BASE_REVISION_HEADER,
+  IDEMPOTENCY_KEY_HEADER,
   PROTOCOL_VERSION,
   ROUTES,
   WRITE_ROUTE_KEYS,
@@ -53,6 +55,11 @@ describe('protocol contract-v1', () => {
     expect(ROUTES.renamePet.path).toBe('/pets/:id/rename');
     expect(ROUTES.setPetLock.path).toBe('/pets/:id/lock');
     expect(ROUTES.releasePet.path).toBe('/pets/:id/release');
+  });
+
+  it('写操作 header 常量已冻结', () => {
+    expect(IDEMPOTENCY_KEY_HEADER).toBe('Idempotency-Key');
+    expect(BASE_REVISION_HEADER).toBe('X-Base-Revision');
   });
 
   it('错误码 key 与值一致且不重复', () => {
