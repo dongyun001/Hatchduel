@@ -461,3 +461,67 @@ interface ApiResponse<T> {
 5. 实时房间是好友约战，还是也做随机匹配？
 6. 账号注销后的数据处理策略？
 7. 多区域部署的触发条件？
+
+---
+
+## 16. M1 服务端实现记录（C 会话，2026-10-29）
+
+本节记录 `server/**` 的一期落地方式，与 `docs/CONTRACT.md` 的契约不冲突；冲突时以 CONTRACT 为准。
+
+### 16.1 框架与目录
+
+- **框架：`node:http` + 自写轻量路由**（`server/src/http/router.ts`）。理由：锁文件只由 0 号维护，C 不能新增依赖；2C2G 下零框架开销最小；统一响应包/错误码/header 需要完全可控。路由只支持静态段与 `:param`，method 严格匹配。
+- 目录：`app.ts`（装配与统一错误出口）→ `routes/`（端点，只做鉴权/校验/编排）→ `services/`（auth/profile/idempotency）→ `domain/`（core 桥接、patch 组合、初始存档）→ `storage/`（Store 接口 + 内存/Postgres）。
+
+### 16.2 请求约定（契约未固化、由服务端先定）
+
+| 用途 | 约定 | 说明 |
+|---|---|---|
+| 鉴权 | `Authorization: Bearer <accessToken>` | token 为 HMAC-SHA256 自签，payload 带 `accountId`/`sessionId` |
+| 协议版本 | `X-Protocol-Version: v1` | 可选；声明了且不等于 `v1` → 400 `VALIDATION_FAILED` |
+| 幂等 | `Idempotency-Key` | 与 `@petbattle/protocol` 常量一致 |
+| 存档版本 | `X-Base-Revision: <n>` | **尚未进 protocol**，服务端先用此名；建议 0 号补 `BASE_REVISION_HEADER` |
+
+- 写操作缺任一 header → 400 `VALIDATION_FAILED`；`baseRevision` 必须是非负整数。
+- 幂等命名空间：登录态写操作用 `accountId`；`/auth/guest` 用 `device:<deviceId>`；`/auth/refresh` 用 `refresh:<sha256(refreshToken)>`。同一 key 不同指纹 → 409 `IDEMPOTENCY_CONFLICT`；重放响应带 `Idempotency-Replayed: true`。
+- `/health` 响应体保持 contract-v1 原样（`{ ok, serverTime, protocolVersion }`），不套 `ApiResponse`。
+
+### 16.3 写操作流水线
+
+```
+按 accountId 互斥 → 读档 → 校验 baseRevision → advanceProfile(now) → 端点改动 → revision++ → revision CAS 落库 → 审计 → 返回 patch
+```
+
+- 先校验 revision 再推进：过期客户端不会白白触发一次时间推进。
+- CAS 失败（并发/多实例）→ 重新读最新档，返回 409 + `RevisionConflictDetails`。
+- `ProfilePatch` 由 `core` 的推进增量与端点增量合并（`server/src/domain/patch.ts`），`revision` 与 `at/lastEvaluatedAt` 由服务端覆写。
+- 审计写入失败不回滚业务写入，但记 `error` 日志。
+
+### 16.4 core 桥接与降级
+
+- 服务端只通过 `CoreAdapter` 调 `advanceProfile`；业务端点不得自行改资源/宠物数值。
+- M1 早期 `createConfigRepo`/`advanceProfile` 仍是契约桩：配置仓库不可用或抛 `CoreNotImplementedError` 时降级为**恒等推进**（不动数据、不产资源，只补 revision/时间），并在日志告警。`PETBATTLE_CORE_STUB=strict` 可关闭降级，让未实现直接变 501。A 交付后无需改服务端代码。
+- 新账号的初始存档目前是**结构完整的空档**（`domain/starter-profile.ts`）：初始 3 只宠物属于领域规则，等 core 提供工厂后替换，服务端不复制这套规则。
+
+### 16.5 存储
+
+- `Store` 接口覆盖账号/存档/会话/幂等/审计；内存实现用于测试与无数据库本地开发。
+- Postgres：账号的外部身份列各自唯一；存档整档存 `profiles.data`（jsonb），写入按 `revision` 条件更新做 CAS；幂等体用 `json`（**不是 jsonb**）保证重放逐字节一致。
+- 迁移：`server/src/storage/migrations/001_init.sql`，启动时先迁移再监听；迁移向前兼容。
+- 2C2G：`PG_POOL_MAX` 默认 10、硬上限 20；容器 `--max-old-space-size=1024`；异步 PvP 用 `Semaphore`（默认并发 2），M1 只留接口不接线。
+- **待 0 号处理**：`pg` 驱动尚未写入 `server/package.json`（锁文件归 0 号）。镜像里用独立目录 + `NODE_PATH` 兜底；本地测试用临时目录装 `pg` 验证过迁移与全链路。
+
+### 16.6 已实现端点（M1 首批）
+
+| 端点 | 行为 |
+|---|---|
+| `GET /health` | 契约原样 |
+| `POST /auth/guest` | `deviceId` → 账号（首次创建 + 空档）、access/refresh token、`profileRevision` |
+| `GET /profile` | 返回全量档 + `revision`；**只读，不推进时间**；`sinceRevision` 暂忽略（CONTRACT §10.6 的决定） |
+| `POST /profile/rename` | 改账号 `displayName`，revision +1 并返回 patch |
+
+### 16.7 尚未实现
+
+- 微信 `code2session` / Steam 票据校验（需要外部密钥与网络，等环境变量就绪）。
+- `/account/bind|unbind`、栖息地、宠物、繁殖、战斗、编队、PvP、排行榜、好友：等 core 实现后按同一流水线接线。
+- 限流（按账号/IP）与异常检测；`battle_sessions` 表与 `BattleSessionStore` 已留位。

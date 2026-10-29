@@ -1,0 +1,46 @@
+# 本地 Demo 拓扑（2C2G）：Node + PostgreSQL 同机，Redis 不上（TECH_DESIGN §16.1）。
+#
+#   docker compose -f server/docker-compose.yml up --build
+#   curl http://127.0.0.1:3000/health
+#
+# 关闭数据库路径（只联调契约，重启丢档）：
+#   PETBATTLE_STORE=memory docker compose -f server/docker-compose.yml up --build server
+name: petbattle
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: petbattle
+      POSTGRES_PASSWORD: petbattle
+      POSTGRES_DB: petbattle
+    # 仅本机调试用（5433 避开办公室/其他项目常占的 5432）；生产不对外暴露。
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U petbattle -d petbattle']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://petbattle:petbattle@db:5432/petbattle
+      PETBATTLE_STORE: ${PETBATTLE_STORE:-postgres}
+      PETBATTLE_TOKEN_SECRET: ${PETBATTLE_TOKEN_SECRET:-dev-only-insecure-secret}
+      # 2C2G：连接池 ≤20（TECH_DESIGN §16.1）。
+      PG_POOL_MAX: 10
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
