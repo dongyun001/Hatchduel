@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  BattleEngine,
   CONDITION_MUL_BASE,
   COUNTER_STRONG,
   COUNTER_WEAK,
@@ -21,30 +20,13 @@ import {
   MVP_SPECIES_IDS,
   OFFLINE_CAP_MS,
   STAGE_MULTIPLIERS,
-  advanceHabitat,
-  advancePet,
-  advanceProfile,
-  breed,
-  buildBattleSetup,
-  buildEnemyTeam,
-  checkBreeding,
-  createConfigRepo,
   createPet,
-  deriveStats,
   expToNext,
-  isInbred,
-  releasePet,
   type ConfigRepo,
   type CreatePetInput,
-  type PetInstance,
-  type Profile,
-  type StageConfig,
 } from '@petbattle/core';
 
 const cfg = null as unknown as ConfigRepo;
-const pet = null as unknown as PetInstance;
-const profile = null as unknown as Profile;
-const stage = null as unknown as StageConfig;
 
 describe('冻结常量', () => {
   it('战斗数值与 AGENTS §3.5 一致', () => {
@@ -87,20 +69,10 @@ describe('expToNext', () => {
 });
 
 describe('M0 契约桩', () => {
+  // 已实现的核心函数不再列在这里：它们由 rng/config-repo/stats/advance/breeding/release/battle
+  // 等测试覆盖。目前只剩 createPet 未实现（A 会话后续批次）。
   const cases: Array<[string, () => unknown]> = [
-    ['createConfigRepo', () => createConfigRepo(null as never)],
     ['createPet', () => createPet(null as unknown as CreatePetInput, cfg)],
-    ['deriveStats', () => deriveStats(pet, cfg)],
-    ['advancePet', () => advancePet(pet, 0, cfg)],
-    ['advanceHabitat', () => advanceHabitat(null as never, [], 0, cfg)],
-    ['advanceProfile', () => advanceProfile(profile, 0, cfg)],
-    ['checkBreeding', () => checkBreeding(pet, pet, 0, profile, cfg)],
-    ['breed', () => breed(pet, pet, 0, cfg, null as never)],
-    ['isInbred', () => isInbred(pet, pet, 3)],
-    ['releasePet', () => releasePet(profile, 'pet_1', 0)],
-    ['buildBattleSetup', () => buildBattleSetup([[], []], cfg, 1)],
-    ['buildEnemyTeam', () => buildEnemyTeam(stage, cfg, 1)],
-    ['BattleEngine.create', () => BattleEngine.create({ seed: 1, teams: [[], []] }, cfg)],
   ];
 
   for (const [name, run] of cases) {
