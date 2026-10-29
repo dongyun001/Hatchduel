@@ -12,13 +12,14 @@ import type { BattleSetup, BattleUnitInit, BattleEvent, BattleState, Command } f
 import type { StatBlock } from './types/stats.js';
 
 import { createConfigRepoImpl } from './config/repo.js';
-import { CoreNotImplementedError } from './errors.js';
 import { deriveStatsImpl } from './stats.js';
 import { advanceHabitatImpl, advancePetImpl, advanceProfileImpl } from './advance.js';
 import { breedImpl, checkBreedingImpl, isInbredImpl } from './breeding.js';
 import { releasePetImpl } from './release.js';
+import { createPetImpl } from './pet.js';
 import { buildBattleSetupImpl, buildEnemyTeamImpl } from './battle/setup.js';
 import {
+  autoCommandImpl,
   availableCommandsImpl,
   createBattleContextImpl,
   submitCommandImpl,
@@ -77,6 +78,11 @@ export interface BreedResult {
   /** 子代，stage = 'egg'；结果在创建时即确定，不可重 roll。 */
   child: PetInstance;
   inbred: boolean;
+  /**
+   * 父母繁殖冷却到期时间，顺序与入参 `[a, b]` 一致（contract-v1.2 D-02）。
+   * `cooldownMs × (1 + 近亲惩罚) × (老年 ×2)`；服务端直接写入，不再自行推算。
+   */
+  parentCooldowns: [EpochMs, EpochMs];
 }
 
 export interface ReleaseResult {
@@ -96,12 +102,10 @@ export function createConfigRepo(data: ConfigData): ConfigRepo {
  * 创建个体。派生属性不落库，按需 `deriveStats`。
  * 蛋阶段的 `fertility.readyAt` 按 hatch + juvenile 计算。
  *
- * 尚未实现（M0 契约桩）：`createPet` 不在首批范围内。
+ * 校验：species/element 必须存在；level 1~20 整数；基因取整并 clamp 0~100。
  */
 export function createPet(input: CreatePetInput, cfg: ConfigRepo): PetInstance {
-  void input;
-  void cfg;
-  throw new CoreNotImplementedError('createPet');
+  return createPetImpl(input, cfg);
 }
 
 /**
@@ -203,9 +207,16 @@ export function isInbred(a: PetInstance, b: PetInstance, maxDepth: number): bool
 /**
  * 放生。蛋 / 锁定 / 上阵 / 栖息地中 / 最后一只成年不可放生；返还基因尘；
  * 图鉴 owned 不回退；调用方写审计日志。
+ *
+ * contract-v1.2 D-01：`cfg` 必填，返还按 `economy.releaseRefund` 全量计算（含特质稀有加成）。
  */
-export function releasePet(profile: Profile, petId: PetId, now: EpochMs): ReleaseResult {
-  return releasePetImpl(profile, petId, now);
+export function releasePet(
+  profile: Profile,
+  petId: PetId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): ReleaseResult {
+  return releasePetImpl(profile, petId, now, cfg);
 }
 
 /**
@@ -253,6 +264,14 @@ export class BattleEngine {
   /** 当前可提交的指令（按回合/存活/精力/目标校验）。 */
   availableCommands(uid: string): Command[] {
     return availableCommandsImpl(this.ctx, uid);
+  }
+
+  /**
+   * 内置确定性 AI 给当前行动者选一条指令（contract-v1.2 D-03）。
+   * 与引擎内部 AI 同一份策略；未轮到 `uid` 或战斗已结束时抛错。
+   */
+  autoCommand(uid: string): Command {
+    return autoCommandImpl(this.ctx, uid);
   }
 
   /** 提交一条指令，返回本步产生的有序事件。 */

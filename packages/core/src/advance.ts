@@ -16,9 +16,8 @@ import type { EpochMs, ResourceId } from './types/common.js';
 
 const MS_PER_HOUR = 3_600_000;
 
-/** 产出系数（DOMAIN §6.1）：幼年 0.5 / 成年 1 / 老年 0.8；蛋不产出。 */
-const PRODUCTION_STAGE_MUL: Record<Stage, number> = {
-  egg: 0,
+/** 产出系数的默认值（DOMAIN §6.1）；配置了 `productionStageMul` 时以配置为准（D-06）。 */
+const DEFAULT_PRODUCTION_STAGE_MUL: Record<Exclude<Stage, 'egg'>, number> = {
   juvenile: 0.5,
   adult: 1,
   elder: 0.8,
@@ -137,7 +136,7 @@ export function advancePetImpl(
 export interface AdvanceHabitatResultImpl {
   habitat: HabitatInstance;
   produced: ResourceBag;
-  /** 每小时消耗合计后无法覆盖的缺口（当前只记录；额外饥饿惩罚待 D 配置化）。 */
+  /** 每小时消耗合计后无法覆盖的缺口（food 缺口会触发可选饥饿惩罚，D-05）。 */
   upkeepShortfall: ResourceBag;
 }
 
@@ -155,6 +154,7 @@ export function advanceHabitatImpl(
 
   const active = pets.filter((pet) => pet.stage !== 'egg');
   const produced: ResourceBag = {};
+  const stageMuls = config.productionStageMul ?? DEFAULT_PRODUCTION_STAGE_MUL;
 
   if (active.length > 0 && dtHours > 0) {
     let elementMul = 1;
@@ -163,7 +163,7 @@ export function advanceHabitatImpl(
     for (const pet of active) {
       elementMul += config.elementBonus[pet.elementId] ?? 0;
       moodSum += pet.condition.mood;
-      stageMulSum += PRODUCTION_STAGE_MUL[pet.stage];
+      if (pet.stage !== 'egg') stageMulSum += stageMuls[pet.stage];
     }
     const stageMul = stageMulSum / active.length;
     const moodMul = 0.8 + (moodSum / active.length / 100) * 0.2;
@@ -191,6 +191,20 @@ export function advanceHabitatImpl(
     stored[rate.resource] = have - paid;
     const shortfall = need - paid;
     if (shortfall > 0) addAmount(upkeepShortfall, rate.resource, shortfall);
+  }
+
+  // 食物不足 → 饥饿惩罚（D-05）。只按“有无缺口”判定，不按缺口大小缩放。
+  const foodShortfall = upkeepShortfall.food ?? 0;
+  const hungerPenalty = config.hungerPenaltyWhenNoFoodPerHour ?? 0;
+  if (foodShortfall > 0 && hungerPenalty > 0 && dtHours > 0) {
+    const extra = hungerPenalty * dtHours;
+    // 就地扣减：契约签名不返回宠物，调用方（advanceProfile）传入的已是副本。
+    for (const pet of active) {
+      pet.condition = {
+        ...pet.condition,
+        hunger: clamp(pet.condition.hunger - extra, 0, 100),
+      };
+    }
   }
 
   return {

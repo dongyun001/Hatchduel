@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BattleEngine,
   buildBattleSetup,
   buildEnemyTeam,
   type BattleEvent,
@@ -165,5 +166,41 @@ describe('同速排序中立（P-004）', () => {
     }
     expect(swappedAFirst).toBeGreaterThan(400);
     expect(swappedAFirst).toBeLessThan(600);
+  });
+});
+
+describe('BattleEngine.autoCommand（contract-v1.2 D-03）', () => {
+  it('与内置 AI 同一策略：公开引擎自动跑完 = 内部 ctx 事件流', () => {
+    const setup = pveSetup(4242);
+    const engine = BattleEngine.create(setup, cfg);
+    let guard = 0;
+    while (engine.state.phase === 'ongoing' && guard < 500) {
+      const actor = engine.state.order[engine.state.cursor]!;
+      engine.submit(engine.autoCommand(actor));
+      guard += 1;
+    }
+    const internal = playToEnd(setup);
+    expect(JSON.stringify(engine.state.log)).toBe(JSON.stringify(internal.log));
+    expect(engine.state.winner).toBe(internal.winner);
+  });
+
+  it('未轮到该单位 / 战斗结束时抛错', () => {
+    const engine = BattleEngine.create(pveSetup(5), cfg);
+    const current = engine.state.order[engine.state.cursor]!;
+    const other = engine.state.order.find((uid) => uid !== current)!;
+    expect(() => engine.autoCommand(other)).toThrow(/还没轮到/);
+
+    const command = engine.autoCommand(current);
+    expect(command.turn).toBe(1);
+    engine.submit({ type: 'surrender', turn: 1, uid: current });
+    expect(() => engine.autoCommand(current)).toThrow(/结束/);
+  });
+
+  it('autoCommand 确定：同 setup 两次第一手一致', () => {
+    const a = BattleEngine.create(pveSetup(88), cfg);
+    const b = BattleEngine.create(pveSetup(88), cfg);
+    const actorA = a.state.order[a.state.cursor]!;
+    const actorB = b.state.order[b.state.cursor]!;
+    expect(b.autoCommand(actorB)).toEqual(a.autoCommand(actorA));
   });
 });

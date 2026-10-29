@@ -7,7 +7,7 @@ import {
   type PetInstance,
 } from '@petbattle/core';
 import { mulberry32 } from '../src/rng.js';
-import { breedingCooldownMs, parentsCooldownUntil } from '../src/breeding.js';
+import { breedingCooldownMs } from '../src/breeding.js';
 
 import { HOUR, T0, addTrait, makePet, makeProfile, makeRepo } from './factory.js';
 
@@ -316,7 +316,7 @@ describe('breed：遗传算法（DOMAIN §8.2）', () => {
     expect(genders).toEqual(new Set(['male', 'female']));
   });
 
-  it('父母冷却：普通 2h、近亲 ×1.2、老年 ×2', () => {
+  it('父母冷却：普通 2h、近亲 ×1.2、老年 ×2，并由 breed 直接返回（D-02）', () => {
     const cfg2 = makeRepo();
     const normal = makePet({ id: 'n' });
     const elder = makePet({ id: 'e', stage: 'elder' });
@@ -326,10 +326,19 @@ describe('breed：遗传算法（DOMAIN §8.2）', () => {
     expect(breedingCooldownMs(elder, false, cfg2)).toBe(4 * HOUR);
     expect(breedingCooldownMs(elder, true, cfg2)).toBe(Math.floor(2 * HOUR * 1.2 * 2));
 
-    expect(parentsCooldownUntil(normal, elder, T0, false, cfg2)).toEqual({
-      n: T0 + 2 * HOUR,
-      e: T0 + 4 * HOUR,
-    });
+    const ordinary = breed(normal, makePet({ id: 'f', gender: 'female' }), T0, cfg2, mulberry32(5));
+    expect(ordinary.parentCooldowns).toEqual([T0 + 2 * HOUR, T0 + 2 * HOUR]);
+
+    const inbredA = makePet({ id: 'ia', ancestors: [{ id: 'gp', depth: 2 }] });
+    const inbredB = makePet({ id: 'ib', gender: 'female', ancestors: [{ id: 'gp', depth: 2 }] });
+    const inbred = breed(inbredA, inbredB, T0, cfg2, mulberry32(6));
+    expect(inbred.parentCooldowns).toEqual([
+      T0 + Math.floor(2 * HOUR * 1.2),
+      T0 + Math.floor(2 * HOUR * 1.2),
+    ]);
+
+    const withElder = breed(elder, makePet({ id: 'g', gender: 'female' }), T0, cfg2, mulberry32(7));
+    expect(withElder.parentCooldowns).toEqual([T0 + 4 * HOUR, T0 + 2 * HOUR]);
   });
 
   it('自定义特质池：突变只从池里挑', () => {

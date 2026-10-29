@@ -162,3 +162,43 @@ describe('validateConfig：关卡与数值范围', () => {
     expect(result.issues.some((i) => i.path.endsWith('.target'))).toBe(true);
   });
 });
+
+describe('validateConfig：contract-v1.2 栖息地可选字段（D-05/D-06）', () => {
+  it('hungerPenaltyWhenNoFoodPerHour 与 productionStageMul 均合法时通过', () => {
+    const config = cloneFixture();
+    const habitat = asRecord(asRecordArray(config['habitats'])[0]!);
+    habitat['hungerPenaltyWhenNoFoodPerHour'] = 5;
+    habitat['productionStageMul'] = { juvenile: 0.5, adult: 1, elder: 0.8 };
+
+    expect(validateConfig(config).issues).toEqual([]);
+  });
+
+  it('hungerPenaltyWhenNoFoodPerHour 为负数时报 out_of_range', () => {
+    const config = cloneFixture();
+    asRecord(asRecordArray(config['habitats'])[0]!)['hungerPenaltyWhenNoFoodPerHour'] = -1;
+    expect(codes(validateConfig(config))).toContain('out_of_range');
+  });
+
+  it('productionStageMul 缺少字段 / 非对象时报错', () => {
+    const missing = cloneFixture();
+    asRecord(asRecordArray(missing['habitats'])[0]!)['productionStageMul'] = {
+      juvenile: 0.5,
+      adult: 1,
+    };
+    expect(codes(validateConfig(missing))).toContain('invalid_type');
+
+    const notObject = cloneFixture();
+    asRecord(asRecordArray(notObject['habitats'])[0]!)['productionStageMul'] = 3;
+    expect(codes(validateConfig(notObject))).toContain('invalid_type');
+  });
+
+  it('productionStageMul 数值超出非负范围时报 out_of_range', () => {
+    const config = cloneFixture();
+    asRecord(asRecordArray(config['habitats'])[0]!)['productionStageMul'] = {
+      juvenile: -0.1,
+      adult: 1,
+      elder: 0.8,
+    };
+    expect(codes(validateConfig(config))).toContain('out_of_range');
+  });
+});

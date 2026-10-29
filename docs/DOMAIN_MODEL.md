@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 项目代号 | PetBattle |
-| 文档版本 | v1.1 |
+| 文档版本 | v1.3 |
 | 日期 | 2026-10-28 |
 | 对应需求 | PRD v1.1 |
 | 状态 | 待评审 |
@@ -17,6 +17,7 @@
 | v1.0 | 2026-10-27 | 初版：个体/基因/繁殖/时间/经济/战斗接口 |
 | v1.1 | 2026-10-28 | 新增被动表、经验曲线、回合结算顺序、敌方快照；修复突变计数、产出系数、状态边界、不变量 |
 | v1.2 | 2026-10-29 | 追加 §15 实现说明（A 会话，contract-v1）：派生属性取整口径、推进顺序落地、繁殖冷却、战斗状态与契约缺口 |
+| v1.3 | 2026-10-29 | contract-v1.2 D-01~D-07：releasePet 带 cfg、BreedResult.parentCooldowns、autoCommand、applyExp、栖息地两个可选字段、暴击倍率口径 |
 
 ---
 
@@ -200,13 +201,16 @@ interface HabitatConfig {
   conditionDecayPerHour: { hunger: number; mood: number; hygiene: number };
   healthDecayWhenStarving: number;
   healthRecoveryPerHour: number; // 初版，待 sim 验证；饥饿/清洁均 >=50 时每小时恢复
+  /** 食物（upkeep）不足时，每只宠物每小时额外扣的饥饿；缺省 0（contract-v1.2 D-05）。 */
+  hungerPenaltyWhenNoFoodPerHour?: number;
+  /** 产出阶段系数；缺省 0.5 / 1 / 0.8（contract-v1.2 D-06）。 */
+  productionStageMul?: { juvenile: number; adult: number; elder: number };
   offlineCapMs: number;         // 默认 8h
   decayCapMs: number;           // 默认 24h
+  // 数据化（CONTRACT C-01）：JSON 不能存函数，等级表代替函数。
   upgrade: {
     maxLevel: number;
-    cost: (level: number) => ResourceCost[];
-    capacity: (level: number) => number;
-    productionMul: (level: number) => number; // 返回该等级的产出乘数（1 起）
+    levels: Array<{ level: number; cost: ResourceCost[]; capacity: number; productionMul: number }>;
   };
 }
 
@@ -384,7 +388,9 @@ interface PetInstance {
 ```
 
 - `crit/critDmg/hit/dodge` 不参与等级、阶段、基因、相性；只乘 `condMul`、`traitMul`、`passiveMul`。
-- 取整只在最后一步；中间保留 double。
+- **暴击倍率口径（contract-v1.2 D-04）**：150%（`CRIT_DAMAGE_DEFAULT`）是**基础倍率**；`condMul`、特质、被动会修正它，
+  满状态的实际暴击倍率可以高于 150%（如 `1.5 × 1.1 = 1.65`）。不要把 150% 当成结算后的固定值。
+- 取整只在最后一步；中间保留 double。比例属性（`crit/critDmg/hit/dodge`）实现时保留 4 位小数后 clamp（见 §15.1）。
 - `crit` 结果 clamp 到 0~1；`dodge` clamp 到 0~0.9；`hit` clamp 到 -0.5~0.5。
 - 蛋阶段不参与战斗；如需展示，用 0。
 
@@ -975,9 +981,9 @@ interface Profile {
 
 ---
 
-## 15. 实现说明（contract-v1，A 会话）
+## 15. 实现说明（contract-v1.2，A 会话）
 
-> 本节只记录 `packages/core` 的实现口径，不改变 §1~§13 的产品规则。契约签名、常量、schema 未动。
+> 本节只记录 `packages/core` 的实现口径，不改变 §1~§13 的产品规则。
 
 ### 15.1 派生属性（§4.1）
 
@@ -985,8 +991,7 @@ interface Profile {
 - `crit/critDmg/hit/dodge`：只乘 `condMul/traitMul/passiveMul`，**保留 4 位小数**后 clamp（`crit 0~1`、`dodge 0~0.9`、`hit ±0.5`）。
   若对这些比例值也 `floor`，`0.05 × 1.06 = 0` 会把暴击率直接抹平；DOMAIN §1「倍率保留 4 位小数」按此执行。
 - 蛋阶段 8 项全部返回 0（不参与战斗与产出）。
-- **待确认**：`condMul` 作用于 `critDmg` 后，满状态宠物暴击为 `1.5 × 1.1 = 1.65`（DOMAIN §4.1 明确写了 condMul 作用于全部属性）；
-  与 AGENTS §3.5「暴击 150%」有口径差，暂按 DOMAIN 实现，等 0 号/PRD 裁定。
+- 暴击倍率：`150%` 是基础值，`condMul`/特质/被动会修正它（contract-v1.2 D-04 已裁定，见 §4.1）。
 
 ### 15.2 时间推进（§5/§6/§7）
 
@@ -994,25 +999,36 @@ interface Profile {
 - 状态衰减依赖栖息地的 `conditionDecayPerHour`，而个体只持有 `habitatId`（实例 id，不是 configId），
   所以衰减在 `advanceProfile` 内、产出之前完成（等价于「先宠物、后栖息地」）：先按宠物所在栖息地找配置，衰减 `decayCapMs` 封顶的时长，再用推进后的状态算产出。
 - 产出：`dtHours` 不截断到整小时（不足 10 分钟按比例算），每个资源单独 `floor`；宠物数为 0 或全为蛋时产出 0。
-  阶段产出系数：幼年 0.5 / 成年 1 / 老年 0.8（暂写在代码常量里，后续可数据化）。
+  阶段产出系数读 `habitat.productionStageMul`，缺省 0.5 / 1 / 0.8（contract-v1.2 D-06）。
 - 消耗：每只非蛋宠物按 `upkeepPerPetPerHour × dtHours` 从 `habitat.stored` 扣，不足时归零、欠账不跨期。
-  「食物不足额外扣饥饿」的系数配置里没有，暂只记录缺口、不额外扣状态（待 D 补字段）。
+  food 有缺口且配置了 `hungerPenaltyWhenNoFoodPerHour` 时，每只非蛋宠物额外扣 `rate × dtHours` 饥饿（缺省 0，contract-v1.2 D-05）。
+  该扣减在 `advanceHabitat` 内**就地**写入传入的宠物（契约签名不返回宠物；`advanceProfile` 传的是副本）。
 - `advanceProfile` 不改入参：返回新的 `profile` 与 `patch`；有变化才 `revision + 1`，同一 `now` 第二次调用 patch 不含 upsert。
 
-### 15.3 繁殖 / 放生（§8）
+### 15.3 建个体 / 升级（§3/§8）
+
+- `createPet`：校验 species/element 存在、`level` 为 1~20 整数；四项基因四舍五入后 clamp 0~100；`traits/hiddenTraits` 去重。
+  新个体一律 `stage = 'egg'`、`bornAt = stageChangedAt = now`、`fertility.readyAt = now + hatchMs + juvenileMs`、
+  `cooldownUntil = 0`、`penalty = 0`、状态全 100、`parents` 缺省 `[null, null]`、`ancestors` 缺省 `[]`。
+- `applyExp(pet, amount, cfg)`（contract-v1.2 D-07）：`exp += amount`，然后
+  `while (level < 20 && exp >= expToNext(level)) { exp -= expToNext(level); level++ }`；满级后经验继续保留。
+  `amount <= 0` 或非有限值原样返回；不碰 `stageProgress`/首通奖励（服务端结算）。`cfg` 目前是签名保留位。
+
+### 15.4 繁殖 / 放生（§8）
 
 - `breed` 的 rng 消费顺序固定：物种 pick → 属性 pick → 属性突变 chance(+pick) → 四项基因各 12 次 → 隐性特质 chance → 特质突变 chance(+pick) → 性别 chance。改动顺序等于改确定性。
 - 子代 `id` 用 `egg_{a.id}_{b.id}_{now}`（正式 id 由服务器生成）；`mutationCount` 只统计属性/特质突变。
-- 父母冷却：`cooldownMs × (1 + 近亲惩罚) × (老年 ×2)`，由 `breedingCooldownMs()` 提供；
-  契约里的 `breed` 只返回子代，父母冷却需服务端写回（见 §15.5）。
+- 父母冷却：`cooldownMs × (1 + 近亲惩罚) × (老年 ×2)`，由 `BreedResult.parentCooldowns: [a, b]` 直接返回（contract-v1.2 D-02），服务端直接落库。
 - `checkBreeding` 的「空位」= 存档内各栖息地实例当前等级容量之和；占位 = 宠物数 + 蛋数。
-- `releasePet` 签名不带 `ConfigRepo`，返还基因尘按 §8.6 字面参数（5 + 等级×2 + 基因和÷10，至少 1），
-  稀有特质加成拿不到 `TraitConfig.rarity`，暂计 0。
+- `releasePet(profile, petId, now, cfg)`（contract-v1.2 D-01）：返还按 `economy.releaseRefund` 全量计算，
+  `max(1, floor(base + level×perLevel + geneSum÷perGeneSumDivisor + Σ traitRarityBonus))`；配置中已删除的特质按 0 计。
 
-### 15.4 战斗（§9）
+### 15.5 战斗（§9）
 
 - 指令驱动：`submit` 推进当前行动者的一个动作，返回该步事件（含回合切换、精力、DOT、buff 计时、重排）。
   `availableCommands(uid)` 只在轮到该单位时非空，按「技能顺序 × 合法目标」展开，最后附 `surrender`。
+- `BattleEngine.autoCommand(uid)`（contract-v1.2 D-03）：内置确定性 AI 的公开入口，与引擎内部选择逻辑是**同一份实现**；
+  未轮到该单位或战斗已结束时抛错。
 - 精力：创建时 0，第 1 回合开始即 +20；普攻命中 +10；技能在伤害结算后扣 cost（与 §9.3 顺序一致）。
 - 伤害：命中 = `clamp(0.90 + hit − dodge, 0.05, 1)`；暴击 `rng() < crit`，倍率取 `stats.critDmg`；
   克制由 `ConfigRepo.counterMultiplier` 给 1.25/0.85/1；浮动 `0.95 + rng()×0.10`；最后 `floor`。
@@ -1022,13 +1038,9 @@ interface Profile {
 - 30 回合：第 30 回合结算完仍未分胜负 → `battleEnd { winner: null, turns: 30 }`。
 - `battleStart` 内嵌的 `state` 是**不含日志**的快照，避免循环引用。
 
-### 15.5 契约缺口（需 0 号裁定，A 未私改签名）
+### 15.6 剩余待办（非阻塞）
 
-| 缺什么 | 影响 | 建议 |
+| 项 | 说明 | 建议 |
 |---|---|---|
-| 无配置的 `releasePet` | 稀有特质返还加成无法计算 | 加可选 `cfg` 参数或改为 `releaseValue(pet, economy)` |
-| `breed` 不返回父母冷却 | 服务端需自行按同一口径写回 | 导出 `parentsCooldownUntil` 或让 `breed` 返回 `{ child, inbred, cooldowns }` |
-| 无公开 AI 入口 | PVE 敌方决策由调用方实现，容易各写一套 | `BattleEngine.autoCommand(uid)` 或 `chooseAiCommand` 进公共导出 |
-| 技能 `cooldown`（回合）未实现 | 配置里有该字段但 MVP 数据未用 | 明确 MVP 忽略；后续加 `BattleBuff` 之外的冷却表 |
-
-
+| 技能 `cooldown`（回合）未实现 | 配置里有该字段但 MVP 数据未用 | MVP 明确忽略；后续加独立冷却表 |
+| 食物不足惩罚只按“有无缺口”判定 | D-05 字段名是 `WhenNoFoodPerHour`，未按缺口大小缩放 | 若要做“欠多少扣多少”，需要新系数，再改一行 |
