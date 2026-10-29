@@ -17,9 +17,9 @@
 
 | 会话 | 状态 | 下一步 |
 |---|---|---|
-| A | 首批已完成；**第二批待做**（createPet + contract-v1.2 调整） | 按 §6 执行；它阻塞 D 的批量模拟和 C 的初始 3 只宠物 |
-| D | 已完成首批 | 等 `createPet` 后跑真实批量模拟，产出 BALANCE 报告 |
-| C | 已完成首批 | 等 `createPet` 后接初始存档；继续栖息地/宠物端点 |
+| A | **第二批已完成并合入 main**（createPet/applyExp + v1.2） | 等 D 的平衡反馈；下一批可做 A 报告里列出的剩余项 |
+| D | 首批已完成 | **已解锁**：跑 `pnpm sim --write`，按 BALANCE §2 调胜率/回合数/资源曲线 |
+| C | 首批已完成 | **已解锁**：用 `createPet` 建初始 3 只；接栖息地/宠物端点 |
 | B | **Cocos Creator 3.8.8 已装**（`C:\ProgramData\cocos\editors\Creator.8.8`） | 按 §4 开工 |
 | E | 暂停 | 美术不参与本轮 |
 
@@ -246,7 +246,7 @@ app 层禁止直接调 wx.*，统一走 platform adapter（ESLint 已配置）�
 | 废稿美术已删除 | ✅ |
 | `@vitest/coverage-v8`、`pg` 已加入 | ✅ |
 | M1 首批 A/C/D 已合并、246 测试全绿 | ✅ |
-| A 的 `createPet` 追加任务 | ❌ 待做（见 §6） |
+| A 的 `createPet` 追加任务 | ✅ 已完成并合入（contract-v1.2） |
 | B 的 Cocos 编辑器版本 | ✅ Cocos Creator 3.8.8（`C:\ProgramData\cocos\editors\Creator.8.8`） |
 
 每个会话开工先跑：
@@ -326,3 +326,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 | v1.1 | 2026-10-29 | 首批合并后更新状态；新增 A 的 createPet 追加任务；B 的 Cocos 编辑器仍未安装 |
 | v1.2 | 2026-10-29 | §6 替换为 A 第二批任务（createPet + contract-v1.2 的 D-01~D-07） |
 | v1.3 | 2026-10-29 | 确认 Cocos Creator 3.8.8 安装路径；B 可开工 |
+| v1.4 | 2026-10-29 | A 第二批完成并合入；D/C 解锁；记录 sim 初版结果 |

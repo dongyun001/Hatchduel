@@ -19,7 +19,7 @@
 | 契约 | 位置 | 状态 |
 |---|---|---|
 | 传输协议 v1 | `packages/protocol/src/**` | 冻结；`PROTOCOL_VERSION = 'v1'` |
-| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；首批已实现，仅 `createPet` 仍为桩（§10.7）；v1.2 的一次签名调整见 §7.1 |
+| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；contract-v1.2 全部函数已实现，无剩余桩；签名调整见 §7.1 |
 | 配置 schema | `packages/core/src/config/schema.ts` + `config/types.ts` | 冻结校验规则；数据由 D 填 |
 | 配置数据样例 | `packages/core/src/config/data/*.json` | 初版样例，**不调平衡**，待 sim |
 | 错误码 | `packages/protocol/src/errors.ts` | 冻结；只增不改 |
@@ -207,7 +207,7 @@ contentVersion: string
 | `validateConfig(input)` / `assertConfig(input)` | 配置校验 |
 | `BattleEngine` | `create` / `availableCommands` / `submit` / `state` / `autoCommand(uid)`（v1.2） |
 
-首批已实现除 `createPet` 与 `applyExp` 外的全部函数；`createPet` 是当前唯一桩（§10.7），`applyExp` 随 v1.2 新增。未实现项由 `contract.test.ts` 显式覆盖。
+contract-v1.2 的全部函数已实现，`contract.test.ts` 只保留常量与公式断言，不再有契约桩。
 
 ### 5.4 冻结常量（`src/constants.ts`）
 
@@ -396,7 +396,7 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 4. **好友互访的每日上限与偷取比例**：Phase 2，接口已冻结，规则后定。
 5. **`pnpm build` 产物形态**：M0 仅 typecheck；A 用 esbuild 出 core/protocol，C 用 Docker 出 server，M1 补。
 6. ~~协议增量~~：**已定**为返回全量档（C 在 `ONLINE_DESIGN.md` §16.6 记录）；只有客户端出现明确的流量/延迟问题时再加增量 patch。
-7. **`createPet` 仍为契约桩**：A 首批实现了 RNG/配置/属性/时间/繁殖/放生/战斗，但没有实现建体函数。它阻塞 D 的批量模拟（初始队伍）和 C 的初始 3 只宠物；追加任务见 `SESSION_PROMPTS.md` §6。不改变 contract-v1 的签名。
+7. ~~`createPet` 仍为契约桩~~：**已解决**。A 第二批实现了 `createPet` 与 `applyExp`，并按 §7.1 落地 D-01~D-07。D 的批量模拟已可运行，C 可以用 `createPet` 建初始 3 只宠物。
 
 ---
 
@@ -427,8 +427,18 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 合并后 | `typecheck / test（246） / lint / validate:config` 全绿 |
 | Postgres | 迁移应用；重启后同 device 仍读到 revision=1 的同一存档 |
 | 真实 core | server 日志无降级；`advanceProfile` 正常推进 |
-| 已知缺口 | `createPet` 未实现，D 的批量战斗/经济/繁殖仅静态检查；C 新档为空档 |
+| 已知缺口 | ~~createPet~~ 已补齐；sim 可跑（初版胜率 0.300 / 平均 5.39 回合，待 D 调参） |
 | 契约补口 | `BASE_REVISION_HEADER` 进 protocol；`pg` 进 server 依赖；strict 模式不再静默降级 |
+
+### 11.3 A 第二批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 275 passed（22 文件） |
+| core 覆盖率 | 行 99.35%，分支 96.45%，函数 100% |
+| contract-v1.2 | `releasePet(..., cfg)`、`BreedResult.parentCooldowns`、`BattleEngine.autoCommand`、`applyExp`、栖息地两个可选字段全部落地 |
+| 批量模拟 | 5000 场：胜率 0.300、平局 0、平均 5.39 回合、大招间隔 3；7 天资源 金币 2904 / 食物 858 / 基因尘 210；1000 次繁殖突变率 0.029 |
+| 结论 | 框架与数据流已通；胜率偏低、回合偏短，属于 D 的初版调参范围（目标见 BALANCE §2） |
 
 ## 12. 变更记录
 
