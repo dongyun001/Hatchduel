@@ -1,0 +1,11 @@
+# Cocos Creator 本地生成目录（根 .gitignore 已覆盖，这里保证工程单独 clone 也不误提交）
+/library/
+/temp/
+/local/
+/build/
+/profiles/
+/native/
+/logs/
+node_modules/
+.vscode/
+.idea/

@@ -317,6 +317,39 @@
 - **规避**：微信类目/主体/软著/版号备案；实名/防沉迷；随机概率公示；隐私政策；Steam 地区规则。
 - **验证**：提审清单逐项打勾；M2 前落实主体与类目。
 
+### P-113 手写场景的脚本组件 class id 不是 22 位 uuid
+
+- **日期**：2026-10-29
+- **发现者/会话**：B
+- **范围**：client
+- **现象**：构建日志出现 `Missing class: <id>` / `Script ... attached to "Canvas" ... is missing or invalid`，运行时场景组件不执行（黑屏）。
+- **原因**：脚本组件的 `__type__` 是 `cclegacy._RF.push({}, "<compressedUUID>", ...)` 注入的 class id。它保留 uuid 前 **5** 位十六进制再编码，长度 **23**；而引擎 `decodeUuid` 处理的是 22 位资源压缩格式。按 22 位算法手写会与构建注入值不一致。
+- **规避**：优先让编辑器保存场景；确需手写/生成场景时，从构建产物 `assets/main/index.js` 的 `_RF.push` 行取 id，或按“前 5 位 + 每 3 个 hex 编码成 2 个 base64”生成；`.scene.meta` 的 uuid 必须与脚本 `.ts.meta` 一致。
+- **验证**：构建日志无 `Missing class`；场景能加载且组件逻辑执行。
+- **关联**：`client/assets/scenes/*.scene`。
+
+### P-114 赋 spriteFrame 会重置节点尺寸
+
+- **日期**：2026-10-29
+- **发现者/会话**：B
+- **范围**：client
+- **现象**：纯色底板/按钮不显示，或只有 8×8；运行时 `UITransform.contentSize` 等于贴图原始尺寸而不是布局尺寸。
+- **原因**：先 `sprite.spriteFrame = frame` 会按贴图尺寸重置 contentSize；之后再设 `sizeMode = CUSTOM` 不会把尺寸改回来。
+- **规避**：统一先设 `sprite.sizeMode = Sprite.SizeMode.CUSTOM`、`type`，再赋 `spriteFrame`，最后 `transform.setContentSize(width, height)`。`client/assets/scripts/ui/nodes.ts` 已封装。
+- **验证**：运行时检查面板/按钮 contentSize 等于设计尺寸；1×1/8×8 白图能铺满面板。
+- **关联**：`client/assets/scripts/ui/nodes.ts`。
+
+### P-115 运行时 setDesignResolutionSize 与 Canvas 相机初始化竞争
+
+- **日期**：2026-10-29
+- **发现者/会话**：B
+- **范围**：client
+- **现象**：UI 整体缩小/偏移；`Camera.orthoHeight` 实测 810，而期望 540（1920×1080 的一半）。
+- **原因**：Boot 里调用 `view.setDesignResolutionSize(1920,1080,...)` 会同步触发 `design-resolution-changed`，Canvas 用当时的 `screen.windowSize` 计算 `orthoHeight`；窗口尺寸随后才稳定，但相机没有再重算。
+- **规避**：设计分辨率只放工程设置 `settings/v2/packages/project.json`（1920×1080，fitWidth+fitHeight=true 即 SHOW_ALL），不要在场景脚本里重复设置；需要动态改分辨率时，监听 `canvas-resize` 后重算。
+- **验证**：`view.getDesignResolutionSize()` 为 1920×1080、scale 为 1280/1920、`Camera.orthoHeight` 为 540。
+- **关联**：`client/assets/scripts/app/BootController.ts`、`client/settings/v2/packages/project.json`。
+
 ---
 
 ## 2.1 2026-10-28 评审补记
@@ -620,3 +653,4 @@
 | v1.3 | 2026-10-29 | 追加 P-042/P-043（M1 首批集成：测试写死配置数值、strict 降级漏判） |
 | v1.4 | 2026-10-29 | 追加 P-044~P-046（A 首批实现反馈：比例属性取整、状态衰减归属、契约缺落库出口） |
 | v1.5 | 2026-10-29 | 追加 P-047/P-048（D/C 第二批：patch 同 id 冲突、栖息地无移出入口） |
+| v1.6 | 2026-10-29 | 追加 P-113~P-115（B 客户端：手写场景 class id、spriteFrame 重置尺寸、设计分辨率与相机竞争） |
