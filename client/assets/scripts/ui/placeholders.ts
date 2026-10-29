@@ -12,6 +12,9 @@ export interface PlaceholderFrames {
   petTurtle: SpriteFrame;
   petFish: SpriteFrame;
   petFrog: SpriteFrame;
+  silhouette: SpriteFrame;
+  portrait: SpriteFrame;
+  egg: SpriteFrame;
   iconCoin: SpriteFrame;
   iconFood: SpriteFrame;
   iconGene: SpriteFrame;
@@ -22,6 +25,9 @@ const PATHS = {
   petTurtle: 'placeholders/pet_turtle_water_idle',
   petFish: 'placeholders/pet_fish_thunder_idle',
   petFrog: 'placeholders/pet_frog_grass_idle',
+  silhouette: 'placeholders/pet_silhouette',
+  portrait: 'placeholders/portrait_placeholder',
+  egg: 'placeholders/egg_placeholder',
   iconCoin: 'placeholders/icon_coin',
   iconFood: 'placeholders/icon_food',
   iconGene: 'placeholders/icon_gene',
@@ -52,11 +58,25 @@ export function preloadPlaceholders(): Promise<PlaceholderFrames> {
       loadFrame(PATHS.petTurtle),
       loadFrame(PATHS.petFish),
       loadFrame(PATHS.petFrog),
+      loadFrame(PATHS.silhouette),
+      loadFrame(PATHS.portrait),
+      loadFrame(PATHS.egg),
       loadFrame(PATHS.iconCoin),
       loadFrame(PATHS.iconFood),
       loadFrame(PATHS.iconGene),
-    ]).then(([white, petTurtle, petFish, petFrog, iconCoin, iconFood, iconGene]) => {
-      cached = { white, petTurtle, petFish, petFrog, iconCoin, iconFood, iconGene };
+    ]).then(([white, petTurtle, petFish, petFrog, silhouette, portrait, egg, iconCoin, iconFood, iconGene]) => {
+      cached = {
+        white,
+        petTurtle,
+        petFish,
+        petFrog,
+        silhouette,
+        portrait,
+        egg,
+        iconCoin,
+        iconFood,
+        iconGene,
+      };
       return cached;
     });
   }

@@ -4,6 +4,7 @@ import { createMockProfile } from '../dev/mockProfile';
 import { initPlatform } from '../platform';
 import type { PlatformAdapter } from '../platform';
 import { ApiClient } from './apiClient';
+import { loadConfigRepo } from './config';
 
 let platform: PlatformAdapter | null = null;
 let apiClient: ApiClient | null = null;
@@ -45,6 +46,9 @@ export async function bootstrapApp(): Promise<BootstrapResult> {
   const launches = ((await adapter.getStorage<number>('petbattle.launches')) ?? 0) + 1;
   await adapter.setStorage('petbattle.launches', launches);
 
+  // 配置先于存档：mock 建体、详情/繁殖/栖息地都要用 ConfigRepo。
+  const cfg = await loadConfigRepo();
+
   if (DEV_CONFIG.useServer) {
     apiClient = new ApiClient({
       baseUrl: DEV_CONFIG.apiBaseUrl,
@@ -69,7 +73,7 @@ export async function bootstrapApp(): Promise<BootstrapResult> {
     }
   }
 
-  appStore.setProfile(createMockProfile(adapter.now()));
+  appStore.setProfile(createMockProfile(adapter.now(), cfg));
   appStore.setRemote({ connected: false, mode: 'mock', lastSyncAt: null });
   return { platform: adapter, mode: 'mock' };
 }

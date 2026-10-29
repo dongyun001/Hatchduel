@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /** 存档拉取与写操作响应（ONLINE_DESIGN §4/§5）。 */
 import type { EpochMs, Profile, ProfilePatch } from '../core';
 

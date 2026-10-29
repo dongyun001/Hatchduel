@@ -1,0 +1,23 @@
+{
+  "hatchMs": 1800000,
+  "juvenileMs": 7200000,
+  "elderAfterMs": 604800000,
+  "cooldownMs": 7200000,
+  "cost": [
+    { "resource": "coin", "amount": 100 },
+    { "resource": "food", "amount": 20 }
+  ],
+  "mutation": {
+    "geneSigma": 8,
+    "traitChance": 0.03,
+    "elementChance": 0.01
+  },
+  "inbreeding": {
+    "generations": 3,
+    "genePenalty": 5,
+    "mutationBonus": 0.02,
+    "fertilityPenalty": 0.2
+  },
+  "maxExpressedTraits": 3,
+  "maxHiddenTraits": 3
+}

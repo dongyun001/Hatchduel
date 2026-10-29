@@ -27,6 +27,59 @@ const ELEMENT_TINT: Record<ElementId, string> = {
   earth: '#a9793f',
 };
 
+const ELEMENT_NAMES: Record<ElementId, string> = {
+  water: '水',
+  fire: '火',
+  grass: '草',
+  earth: '土',
+  thunder: '雷',
+};
+
+export function elementName(elementId: ElementId): string {
+  return ELEMENT_NAMES[elementId] ?? elementId;
+}
+
+export function formatAmount(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Math.round(value);
+  if (Math.abs(value - rounded) < 0.05) return String(rounded);
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+export function statusColor(value: number): string {
+  if (value >= 70) return COLORS.good;
+  if (value >= 40) return COLORS.accent;
+  return COLORS.danger;
+}
+
+/** 四项状态（饿/心/净/血）：小色块 + 数值，颜色按阈值。 */
+export function createStatusRow(
+  parent: Node,
+  pet: PetInstance,
+  frames: PlaceholderFrames,
+  width = 300,
+): Node {
+  const row = makeNode('status-row', parent, width, 28);
+  const items: Array<{ label: string; value: number }> = [
+    { label: '饿', value: pet.condition.hunger },
+    { label: '心', value: pet.condition.mood },
+    { label: '净', value: pet.condition.hygiene },
+    { label: '血', value: pet.condition.health },
+  ];
+  items.forEach((item, index) => {
+    const x = (index - 1.5) * (width / 4);
+    const dot = makeSprite(row, frames.white, 18, 18, statusColor(item.value));
+    place(dot.node, x - 26, 0);
+    const label = makeLabel(row, `${item.label}${Math.round(item.value)}`, {
+      fontSize: FONT_SIZE.small,
+      color: COLORS.textDim,
+      align: 'left',
+    });
+    place(label.node, x + 18, 0);
+  });
+  return row;
+}
+
 export function speciesName(speciesId: string): string {
   return SPECIES_NAMES[speciesId] ?? speciesId;
 }
@@ -79,7 +132,7 @@ export function createResourceBar(parent: Node, profile: Profile, frames: Placeh
     place(group, (index - 1) * 380, 0);
     const icon = makeSprite(group, entry.icon, SPRITE_SIZE.icon32 * DESIGN.pixelScale, SPRITE_SIZE.icon32 * DESIGN.pixelScale);
     place(icon.node, -110, 0);
-    const label = makeLabel(group, `${entry.label} ${entry.value}`, {
+    const label = makeLabel(group, `${entry.label} ${formatAmount(entry.value)}`, {
       fontSize: FONT_SIZE.body,
       color: COLORS.text,
       align: 'left',

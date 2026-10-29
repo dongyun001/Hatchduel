@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /** 异步 PvP（ONLINE_DESIGN §6）。Phase 1 为服务器全自动结算，攻方只看战报。 */
 import type { EpochMs, Id, PetId } from '../core';
 import type { BattleReplay } from './battle';

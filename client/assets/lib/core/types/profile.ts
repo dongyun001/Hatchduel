@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /** 资源、栖息地与存档（DOMAIN_MODEL §6、§10、§11）。 */
 import type { EpochMs, Id, ResourceId } from './common';
 import type { HabitatId, PetId, PetInstance } from './pet';

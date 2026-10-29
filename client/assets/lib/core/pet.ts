@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /**
  * 建个体（DOMAIN_MODEL §3/§5.1/§8.2，contract-v1.2）。
  *
@@ -25,7 +26,7 @@ function normalizeGene(key: CoreStatKey, value: number): number {
 }
 
 function dedupe(list: readonly Id[] | undefined): Id[] {
-  return [...new Set(list ?? [])];
+  return Array.from(new Set(list ?? []));
 }
 
 export function createPetImpl(input: CreatePetInput, cfg: ConfigRepo): PetInstance {
