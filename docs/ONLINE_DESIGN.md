@@ -501,7 +501,8 @@ interface ApiResponse<T> {
 
 ### 16.4 core 桥接、初始档与降级
 
-- 服务端只通过 `CoreAdapter` 调领域函数（`advanceProfile` / `releasePet` / 六个栖息地操作）；业务端点不得自行改资源、宠物属性或阶段。
+- 服务端只通过 `CoreAdapter` 调领域函数（`advanceProfile` / `releasePet` / 六个栖息地操作 / `buildPveBattleSetup` / `runBattle` / `applyPveRewards` / `startBreeding` / `claimBreeding`）；业务端点不得自行改资源、宠物属性或阶段。
+- 繁殖随机源：`startBreeding` 需要注入 `Rng`，但 `@petbattle/core` 公共入口没有导出 `mulberry32`（只能在内部 `rng.ts` 用），服务端按包边界不能深引用，因此 `domain/rng.ts` 用 CSPRNG 构造同接口的 `Rng`（繁殖结果由服务器生成并落库、不重放，不需要跨端确定性）。已按 CONTRACT §9.3 建议 A 导出 `createRng(seed)`，之后替换实现即可。
 - 栖息地失败码来自 core 的 `Error`（`name = 'HabitatError'` + `code`，core 未导出 class，服务端按结构化特征识别），映射见 `server/src/errors.ts`：`pet_not_found → PET_NOT_FOUND(404)`、`habitat_not_found|food_not_found → NOT_FOUND(404)`、`capacity_full → CAPACITY_FULL(409)`、`insufficient_resources → INSUFFICIENT_RESOURCES(409)`、`egg_not_allowed|max_level|slot_conflict → VALIDATION_FAILED(400)`。
 - `collectHabitat` 只返回 `{ profile, patch }`（CONTRACT D-12），因此 `collected` 由服务端在调用前按同一口径快照：`stored` 的整数部分入账、小数零头留在 `stored`。若 core 以后直接返回 `collected`，服务端改成透传即可。
 - **初始档（`domain/starter-profile.ts`）**：调 `createPet` 建 3 只（水龟/雷鱼/草蛙，四项基因 50，generation 1，parents `[null,null]`，性别 male/female/male），出生时间取 `now - hatchMs - juvenileMs`，再对整档调 `advanceProfile(profile, now, cfg)`，断言全部 `adult` 且 `fertility.readyAt <= now`；栖息地 `meadow` 1 级、3 只占位 + 1 空；资源取 `economy.startingResources`；图鉴写 3 个组合、`bestGene = 50`；最终 `revision = 0`、`createdAt = lastEvaluatedAt = now`（首次登录不结算离线产出）。服务端不手写阶段阈值/衰减/产出。
@@ -512,7 +513,8 @@ interface ApiResponse<T> {
 
 - `Store` 接口覆盖账号/存档/会话/幂等/审计；内存实现用于测试与无数据库本地开发。
 - Postgres：账号的外部身份列各自唯一；存档整档存 `profiles.data`（jsonb），写入按 `revision` 条件更新做 CAS；幂等体用 `json`（**不是 jsonb**）保证重放逐字节一致。
-- 迁移：`server/src/storage/migrations/001_init.sql`，启动时先迁移再监听；迁移向前兼容。
+- 迁移：`server/src/storage/migrations/*.sql` 按文件名顺序执行，并由 `schema_migrations` 记录已应用版本；启动时先迁移再监听。**迁移不能每次启动盲跑**：`002_battle_sessions.sql` 含条件 `drop`（清理 001 的占位表），重跑会清掉 PvE 会话——本批实测踩到并已修复，`migrate.test.ts` 覆盖“第二次启动不再执行迁移”。
+- PvE 会话表 `battle_sessions`（002）：`battle_id` 主键、`setup` jsonb 快照、`party_pet_ids` jsonb、`expires_at`、`status(started|claimed)`；按 `(account_id, status)` 建索引，`claim` 用 `status='started'` 条件更新做 CAS。
 - 2C2G：`PG_POOL_MAX` 默认 10、硬上限 20；容器 `--max-old-space-size=1024`；异步 PvP 用 `Semaphore`（默认并发 2），M1 只留接口不接线。
 - `pg` 已是 `server` 的正式依赖（0 号在 M1 首批合并时补齐）；compose 默认 `PETBATTLE_CORE_STUB=strict`。
 
@@ -534,20 +536,43 @@ interface ApiResponse<T> {
 | `POST /habitat/clean` | `{ petId }`：恢复 hygiene（缺省 +20，可由栖息地 `careRecoveryPerAction` 覆盖），不消耗资源 |
 | `POST /habitat/play` | `{ petId }`：恢复 mood（缺省 +20），不消耗资源 |
 | `POST /habitat/upgrade` | `{ habitatId }`：扣下一级成本、扩容量；资源不足 `INSUFFICIENT_RESOURCES`，到上限 `VALIDATION_FAILED` |
+| `POST /battle/pve/start` | `{ stageId }`：校验关卡解锁（order=1 或前一关 cleared → `STAGE_LOCKED`）与编队（1~3、存在、非蛋 → `INVALID_LINEUP`）；seed 由服务器生成；落会话并返回 `{ battleId, stageId, setup, expiresAt }` |
+| `POST /battle/pve/claim` | `{ battleId, commands }`：从会话快照重放指令（`runBattle`），必须打完（否则 `VALIDATION_FAILED`）；`winner===0` 才发奖，平局按失败；返回 `{ patch, winner, rewards }`。会话不存在 `BATTLE_NOT_FOUND`、过期 `BATTLE_EXPIRED`、不同幂等键重复领取 `ALREADY_CLAIMED` |
+| `POST /breeding/start` | `{ parentA, parentB }`：调 `core.startBreeding`（校验/扣费/遗传/冷却）；返回 `{ egg, inbred, patch }`。错误映射见下 |
+| `POST /breeding/claim` | `{ eggId }`：调 `core.claimBreeding`，成功时服务端把 `stats.hatchlings +1`；返回 `{ pet, patch }` |
 
-- 所有写端点都要求 `Idempotency-Key` + `X-Base-Revision`，并走同一流水线与审计。
+- 所有写端点都要求 `Idempotency-Key` + `X-Base-Revision`，并走同一流水线与审计；审计动作含 `battle.pve.claim`、`breeding.start`、`breeding.claim`。
+
+**PvE 会话生命周期（CONTRACT §7.4 E-01/E-02）**
+
+- TTL 30 分钟（`PETBATTLE_BATTLE_TTL_MS`）；同一账号同时只有一个未结束会话，`start` 会把旧会话的 `expires_at` 压到 `now`，旧 `battleId` 再 claim 返回 `BATTLE_EXPIRED`。
+- `start` 不做时间推进、不 bump revision，但要求 `baseRevision` 与当前存档一致（过期返回 409）。
+- seed 完全由服务器生成（`crypto.randomInt`），客户端在 body 里传 `seed/winner` 一律忽略；claim 只接受有序 `commands`，服务端重放复算胜负与奖励。
+- 会话过期不改状态（避免后台任务），靠 `expires_at` 判定。
+
+**繁殖错误映射（CONTRACT §7.4 / §8.3）**
+
+| core reason | 协议码 |
+|---|---|
+| `not_found`（父母/蛋不存在） | `NOT_FOUND` 404 |
+| `not_adult` / `same_pet` / `same_gender` / `infertile` | `VALIDATION_FAILED` 400 |
+| `locked` | `PET_LOCKED` 409 |
+| `cooldown` | `COOLDOWN_ACTIVE` 409 |
+| `no_capacity` | `CAPACITY_FULL` 409 |
+| `cost` | `INSUFFICIENT_RESOURCES` 409 |
+| `egg_not_ready` | `EGG_NOT_READY` 409 |
+| `already_claimed` | `ALREADY_CLAIMED` 409 |
+| `BattleReplayError.invalid_command/not_finished` | `VALIDATION_FAILED` 400 |
 
 ### 16.7 尚未实现
 
 | 端点 | 缺什么 | 说明 |
 |---|---|---|
-| `/breeding/start` `/breeding/claim` | `checkBreeding`/`breed` 已可用（含 `parentCooldowns`）；缺「开始繁殖」与「领取蛋」的落库出口口径 | `breed` 直接返回 `child`，但开始时扣费/写冷却、领取时把蛋转入 `pets` 需要 0 号定口径（CONTRACT §9.3 已预裁定 applyProfilePatch/startBreeding，待落地） |
-| `/battle/pve/start` `/battle/pve/claim` | `buildPveBattleSetup`/`buildBattleSetup`/`BattleEngine`/`applyExp` 已可用 | 需要战斗会话存储与奖励发放口径（CONTRACT §10.2） |
-| `/pvp/defense` `/pvp/opponent` `/pvp/fight` `/pvp/replay/:id` | `buildBattleSetup` 已可用；匹配与战报存储未定义 | 需先定匹配/快照/回放模型；`battle_sessions` 表已留位 |
+| `/pvp/defense` `/pvp/opponent` `/pvp/fight` `/pvp/replay/:id` | `buildBattleSetup`/`runBattle` 已可用；匹配、防守快照有效期与战报存储未定义 | 表结构可复用 `battle_sessions` 的思路（存 setup 快照），但 PvP 还需要匹配与回放口径 |
 | `/leaderboard` `/friends` `/friends/:id/visit` | — | 指标口径（CONTRACT §10.3）与好友规则未定 |
 | `/account/bind` `/account/unbind` `/auth/wechat` `/auth/steam` | — | 需要平台密钥与外部网络校验 |
 | 限流与异常检测 | — | 按账号/IP，Redis 后置 |
 
 **产品待确认（按现状实现）**：`feed/clean/play` 目前允许操作不在栖息地的宠物（core 对不在栖息地的情况使用默认恢复量 20/20），服务端不额外加限制；是否收紧为「仅栖息地内互动」等 PRD 口径确认后再改。
 
-- `battle_sessions` 表与 `BattleSessionStore` 接口已留位，用于 PvP 快照/重放（PITFALLS P-027）。
+- `battle_sessions` 已由 PvE 使用（快照 + 状态 CAS）；PvP 接入时按同样思路扩展 `kind`/防守快照，仍遵循 PITFALLS P-027（快照不可引用实时宠物）。

@@ -30,6 +30,8 @@ export interface ServerConfig {
   refreshTokenTtlMs: number;
   /** 幂等结果保留时长；重放窗口。 */
   idempotencyTtlMs: number;
+  /** PvE 战斗会话有效期（CONTRACT §7.4 E-01，默认 30 分钟）。 */
+  battleSessionTtlMs: number;
   maxBodyBytes: number;
   /** core 还是契约桩时是否用恒等推进跑通契约；生产应设 `PETBATTLE_CORE_STUB=strict`。 */
   allowCoreStub: boolean;
@@ -66,6 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     accessTokenTtlMs: readInt(env, 'PETBATTLE_ACCESS_TTL_MS', 2 * HOUR),
     refreshTokenTtlMs: readInt(env, 'PETBATTLE_REFRESH_TTL_MS', 30 * DAY),
     idempotencyTtlMs: readInt(env, 'PETBATTLE_IDEMPOTENCY_TTL_MS', DAY),
+    battleSessionTtlMs: readInt(env, 'PETBATTLE_BATTLE_TTL_MS', 30 * 60 * 1000),
     maxBodyBytes: readInt(env, 'PETBATTLE_MAX_BODY_BYTES', 64 * 1024),
     allowCoreStub: env['PETBATTLE_CORE_STUB'] !== 'strict',
     pvpSimulationConcurrency: readInt(env, 'PETBATTLE_PVP_CONCURRENCY', 2),

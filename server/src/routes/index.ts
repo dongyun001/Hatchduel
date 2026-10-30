@@ -2,6 +2,8 @@
 import type { RouteHandler, ServerDeps } from '../http/context.js';
 import type { Router } from '../http/router.js';
 import { registerAuthRoutes } from './auth.routes.js';
+import { registerBattleRoutes } from './battle.routes.js';
+import { registerBreedingRoutes } from './breeding.routes.js';
 import { registerHabitatRoutes } from './habitat.routes.js';
 import { registerLineupRoutes } from './lineup.routes.js';
 import { registerPetRoutes } from './pets.routes.js';
@@ -13,4 +15,6 @@ export function registerRoutes(router: Router<RouteHandler>, deps: ServerDeps): 
   registerPetRoutes(router, deps);
   registerLineupRoutes(router, deps);
   registerHabitatRoutes(router, deps);
+  registerBattleRoutes(router, deps);
+  registerBreedingRoutes(router, deps);
 }

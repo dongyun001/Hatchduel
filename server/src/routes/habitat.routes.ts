@@ -11,19 +11,14 @@
  */
 import { ROUTES } from '@petbattle/protocol';
 
-import { requireAccount } from '../http/auth-guard.js';
 import type { RequestContext, RouteHandler, ServerDeps } from '../http/context.js';
-import { okReply } from '../http/reply.js';
 import {
   asObject,
-  requireBaseRevision,
-  requireIdempotencyKey,
   requireNullableStringField,
   requireStringField,
 } from '../http/request.js';
 import type { Router } from '../http/router.js';
-import type { Reply } from '../http/reply.js';
-import { requestFingerprint } from '../services/idempotency.js';
+import { runIdempotentWrite } from './write-shell.js';
 
 const MAX_ID_LENGTH = 128;
 
@@ -38,43 +33,6 @@ export function registerHabitatRoutes(router: Router<RouteHandler>, deps: Server
   router.add('POST', ROUTES.upgradeHabitat.path, async (context) => upgrade(context, deps));
 }
 
-interface WriteExecution {
-  accountId: string;
-  baseRevision: number;
-}
-
-interface WriteOutcome {
-  revision: number;
-  data: unknown;
-}
-
-/** 六个端点的公共壳：鉴权 → 幂等 → baseRevision → 执行 → 统一响应。 */
-async function runWrite(
-  context: RequestContext,
-  deps: ServerDeps,
-  routePath: string,
-  fingerprint: Record<string, unknown>,
-  execute: (execution: WriteExecution) => Promise<WriteOutcome>,
-): Promise<Reply> {
-  const account = await requireAccount(context, deps);
-  const idempotencyKey = requireIdempotencyKey(context.req);
-  const baseRevision = requireBaseRevision(context.req);
-
-  return deps.idempotency.run({
-    scope: account.id,
-    key: idempotencyKey,
-    fingerprint: requestFingerprint('POST', routePath, { ...fingerprint, baseRevision }),
-    now: context.now,
-    execute: async () => {
-      const outcome = await execute({ accountId: account.id, baseRevision });
-      return okReply(200, outcome.data, {
-        revision: outcome.revision,
-        serverTime: context.now,
-      });
-    },
-  });
-}
-
 async function movePet(context: RequestContext, deps: ServerDeps) {
   const body = asObject(context.body);
   const petId = requireStringField(body, 'petId', { ...ID_FIELD, label: 'petId' });
@@ -83,7 +41,7 @@ async function movePet(context: RequestContext, deps: ServerDeps) {
     label: 'habitatId',
   });
 
-  return runWrite(
+  return runIdempotentWrite(
     context,
     deps,
     ROUTES.movePetToHabitat.path,
@@ -104,7 +62,7 @@ async function collect(context: RequestContext, deps: ServerDeps) {
   const body = asObject(context.body);
   const habitatId = requireStringField(body, 'habitatId', { ...ID_FIELD, label: 'habitatId' });
 
-  return runWrite(
+  return runIdempotentWrite(
     context,
     deps,
     ROUTES.collectHabitat.path,
@@ -125,7 +83,7 @@ async function feed(context: RequestContext, deps: ServerDeps) {
   const petId = requireStringField(body, 'petId', { ...ID_FIELD, label: 'petId' });
   const foodId = requireStringField(body, 'foodId', { ...ID_FIELD, label: 'foodId' });
 
-  return runWrite(
+  return runIdempotentWrite(
     context,
     deps,
     ROUTES.feedPet.path,
@@ -146,7 +104,7 @@ async function clean(context: RequestContext, deps: ServerDeps) {
   const body = asObject(context.body);
   const petId = requireStringField(body, 'petId', { ...ID_FIELD, label: 'petId' });
 
-  return runWrite(context, deps, ROUTES.cleanPet.path, { petId }, (execution) =>
+  return runIdempotentWrite(context, deps, ROUTES.cleanPet.path, { petId }, (execution) =>
     deps.profiles.cleanPet({
       accountId: execution.accountId,
       petId,
@@ -161,7 +119,7 @@ async function play(context: RequestContext, deps: ServerDeps) {
   const body = asObject(context.body);
   const petId = requireStringField(body, 'petId', { ...ID_FIELD, label: 'petId' });
 
-  return runWrite(context, deps, ROUTES.playWithPet.path, { petId }, (execution) =>
+  return runIdempotentWrite(context, deps, ROUTES.playWithPet.path, { petId }, (execution) =>
     deps.profiles.playWithPet({
       accountId: execution.accountId,
       petId,
@@ -176,7 +134,7 @@ async function upgrade(context: RequestContext, deps: ServerDeps) {
   const body = asObject(context.body);
   const habitatId = requireStringField(body, 'habitatId', { ...ID_FIELD, label: 'habitatId' });
 
-  return runWrite(context, deps, ROUTES.upgradeHabitat.path, { habitatId }, (execution) =>
+  return runIdempotentWrite(context, deps, ROUTES.upgradeHabitat.path, { habitatId }, (execution) =>
     deps.profiles.upgradeHabitat({
       accountId: execution.accountId,
       habitatId,
