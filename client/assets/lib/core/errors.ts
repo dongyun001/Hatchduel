@@ -60,3 +60,29 @@ export class BreedingError extends Error {
     this.reason = reason;
   }
 }
+
+/** PvE 指令重放失败（contract-v1.5 E-08）。 */
+export type BattleReplayErrorReason = 'invalid_command' | 'not_finished';
+
+export class BattleReplayError extends Error {
+  readonly reason: BattleReplayErrorReason;
+
+  constructor(reason: BattleReplayErrorReason) {
+    super(`战斗重放失败：${reason}`);
+    this.name = 'BattleReplayError';
+    this.reason = reason;
+  }
+}
+
+/** 繁殖蛋领取失败（contract-v1.5 E-07）。 */
+export type BreedingClaimErrorReason = 'not_found' | 'egg_not_ready' | 'already_claimed';
+
+export class BreedingClaimError extends Error {
+  readonly reason: BreedingClaimErrorReason;
+
+  constructor(reason: BreedingClaimErrorReason) {
+    super(`领取繁殖蛋失败：${reason}`);
+    this.name = 'BreedingClaimError';
+    this.reason = reason;
+  }
+}

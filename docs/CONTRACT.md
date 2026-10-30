@@ -339,6 +339,13 @@ A 首批完成后提了 4 条变更请求和 3 条待明确项。裁定如下；
 | E-06 | 图鉴 | claim 时敌方每个 `species:element` 标 `seen=true`；发放的宠物标 `seen/owned=true`、`bestGene=50` |
 | E-07 | 繁殖领取 | `eggId` 必须在 `breeding.eggs`；宠物缺失 `NOT_FOUND`；仍是蛋 `EGG_NOT_READY`(409)；已领取（不在 eggs 但宠物存在）`ALREADY_CLAIMED`(409)；成功后从 eggs 移除并返回 pet；幂等键重放返回同一结果；领取不做阶段推进（服务端先 `advanceProfile`） |
 | E-08 | core 签名 | `runBattle(setup, cfg, commands): { winner, turns, events }` + `BattleReplayError('invalid_command'|'not_finished')`；`applyPveRewards(profile, stage, { firstClear, winner, partyPetIds, turns }, now, cfg): { profile, patch, rewards }`；`claimBreeding(profile, eggId, now, cfg): { profile, patch, pet }` + `BreedingClaimError('not_found'|'egg_not_ready'|'already_claimed')` |
+**补充口径（A 第五批实现后确认）**
+
+- **E-02a 多余指令**：`runBattle` 在 `finished` 之后忽略剩余命令（容错，不算作弊）；但命令序列必须能重放到 `finished`，否则 `not_finished`。
+- **E-06a 图鉴 seen**：敌方 `species:element` 在 claim 时标记 `seen`，胜负/平局都标（打过即见过）；`owned` 只有发放/拥有才为 true。
+- **E-07a 孵化统计**：`stats.hatchlings` 由服务端在繁殖领取成功后 `+1`，core 不处理（`claimBreeding` 只管 eggs 与宠物）。
+- **E-05a 首通蛋 ID**：`reward_{stageId}_{index}` 确定性生成；冲突时确定性追加序号。基因固定 50、level 1，不读数据。
+
 
 ---
 
@@ -548,6 +555,17 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 写操作 | Habitat 动作接入 ApiClient（mock 开关保留）；409 重建与 serverTime 偏移验证 |
 | 同步 | `assets/lib` + `assets/resources/config` 由 sync-lib 生成，CI 检查 |
 | 构建 | 客户端 typecheck、WeChat 空包、P-116 记录 |
+
+### 11.9 A 第五批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 分支 422；core 行覆盖率 99.07% |
+| runBattle | 按序重放；非法命令 `invalid_command`、未结束 `not_finished`；结束后多余命令忽略 |
+| applyPveRewards | 仅胜利发奖；首通/重复；经验给仍存在队员；首通蛋（基因 50、性别按序号）；codex；bestTurns |
+| claimBreeding | not_found / egg_not_ready / already_claimed；成功移出 eggs |
+| 协议 | 无新增改动；`BattleRewards = PveRewards` 自动成立 |
+| 确定性 | 指纹 b661e370 未变（不改战斗数值/顺序） |
 
 ## 12. 变更记录
 

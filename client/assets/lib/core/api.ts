@@ -20,7 +20,10 @@ import { deriveStatsImpl } from './stats';
 import { advanceHabitatImpl, advancePetImpl, advanceProfileImpl } from './advance';
 import { breedImpl, checkBreedingImpl, isInbredImpl } from './breeding';
 import { startBreedingImpl } from './breeding-start';
+import { claimBreedingImpl } from './breeding-claim';
+import { applyPveRewardsImpl } from './pve-rewards';
 import { applyProfilePatchImpl } from './profile-patch';
+import { BattleReplayError } from './errors';
 import { releasePetImpl } from './release';
 import {
   cleanPetImpl,
@@ -115,6 +118,27 @@ export interface PveRewards {
   firstClear: boolean;
 }
 
+/** PvE 结算上下文（contract-v1.5 E-03/E-04）：`firstClear` 由服务端按 stageProgress 计算。 */
+export interface PveRewardContext {
+  firstClear: boolean;
+  winner: 0 | 1 | null;
+  /** 开战时的 lineup 快照；claim 时仍存在的队员才吃经验。 */
+  partyPetIds: readonly PetId[];
+  turns: number;
+}
+
+export interface PveRewardResult {
+  profile: Profile;
+  patch: ProfilePatch;
+  rewards: PveRewards;
+}
+
+export interface ClaimBreedingResult {
+  profile: Profile;
+  patch: ProfilePatch;
+  pet: PetInstance;
+}
+
 /** 繁殖编排结果（contract-v1.4 D-17）：`patch` 的 revision 保持输入值。 */
 export interface StartBreedingResult {
   profile: Profile;
@@ -152,6 +176,32 @@ export function startBreeding(
   rng: Rng,
 ): StartBreedingResult {
   return startBreedingImpl(profile, parentAId, parentBId, now, cfg, rng);
+}
+/**
+ * PvE 奖励结算（contract-v1.5 E-03~E-06）：只有 `winner === 0` 发奖；失败/平局只记 `battlesLost`。
+ * 首通宠物以蛋阶段直接进 `profile.pets`（不进 `breeding.eggs`）。不推进时间，patch revision 保持输入值。
+ */
+export function applyPveRewards(
+  profile: Profile,
+  stage: StageConfig,
+  ctx: PveRewardContext,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): PveRewardResult {
+  return applyPveRewardsImpl(profile, stage, ctx, now, cfg);
+}
+
+/**
+ * 领取繁殖蛋（contract-v1.5 E-07）：从 `breeding.eggs` 出栏并返回个体；
+ * 只允许已孵化（非蛋阶段）的宠物；不推进阶段、不推进时间。
+ */
+export function claimBreeding(
+  profile: Profile,
+  eggId: PetId,
+  now: EpochMs,
+  cfg: ConfigRepo,
+): ClaimBreedingResult {
+  return claimBreedingImpl(profile, eggId, now, cfg);
 }
 
 /**
@@ -427,4 +477,35 @@ export class BattleEngine {
   get state(): Readonly<BattleState> {
     return this.ctx.state;
   }
+}
+
+/**
+ * 从零重放一场战斗（contract-v1.5 E-02）：`setup + seed + commands` 必须能跑完。
+ * - 指令非法（回合不符 / 不是当前行动者 / 目标或精力不合法）→ `BattleReplayError('invalid_command')`；
+ * - 指令用尽仍未结束 → `BattleReplayError('not_finished')`；
+ * - 结束后多余的指令忽略；始终受 30 回合上限约束。
+ */
+export function runBattle(
+  setup: BattleSetup,
+  cfg: ConfigRepo,
+  commands: readonly Command[],
+): { winner: 0 | 1 | null; turns: number; events: BattleEvent[] } {
+  const engine = BattleEngine.create(setup, cfg);
+
+  for (const command of commands) {
+    if (engine.state.phase === 'finished') break;
+    try {
+      engine.submit(command);
+    } catch {
+      throw new BattleReplayError('invalid_command');
+    }
+  }
+
+  if (engine.state.phase !== 'finished') throw new BattleReplayError('not_finished');
+
+  return {
+    winner: engine.state.winner,
+    turns: engine.state.turn,
+    events: [...engine.state.log],
+  };
 }

@@ -17,9 +17,9 @@
 
 | 会话 | 状态 | 下一步 |
 |---|---|---|
-| A | 第四批已完成并合入（v1.4） | **第五批待做**（v1.5）：runBattle/applyPveRewards/claimBreeding（§6） |
+| A | **第五批已完成并合入**（v1.5） | 等 C/B 联调反馈；后续可补奖励封顶/繁殖统计归属 |
 | D | 第三批已完成并合入 | **第四批待做**：奖励模板核对与最终平衡（可与 A 并行） |
-| C | 第三批已完成并合入 | **第四批待做**：PvE 会话 + 繁殖端点（等 A 第五批） |
+| C | 第三批已完成并合入 | **第四批进行中**（A 已合并；如尚未 merge main，先 merge） |
 | B | 第二批已完成并合入 | **第三批待做**：PvE 与繁殖完整交互（等 C 第四批） |
 | E | 暂停 | 美术不参与本轮 |
 
@@ -115,13 +115,14 @@ server/src/{storage,services,routes,domain}/**、server/src/storage/migrations/0
    - runBattle(setup, cfg, commands) 重放；invalid_command/not_finished→VALIDATION_FAILED；
    - firstClear = winner===0 && !stageProgress.cleared；
    - applyPveRewards(profile, stage, {firstClear, winner, partyPetIds, turns}, now, cfg)；
-   - 会话置 claimed；返回 patch/winner/rewards；重复同键返回同一响应。
+   - 会话置 claimed；返回 patch/winner/rewards；重复同键返回同一响应；
+   - core 会忽略结束后多余指令，不要当作弊；命令序列必须能重放到 finished。
 4. POST /breeding/start：调 startBreeding；BreedingError 映射：
    not_adult/same_pet/same_gender/infertile→VALIDATION_FAILED；cooldown→COOLDOWN_ACTIVE；
    no_capacity→CAPACITY_FULL；cost→INSUFFICIENT_RESOURCES；locked→PET_LOCKED；
    返回 egg/inbred/patch。
 5. POST /breeding/claim：调 claimBreeding；not_found→NOT_FOUND；egg_not_ready→EGG_NOT_READY；
-   already_claimed→ALREADY_CLAIMED；成功返回 pet/patch。
+   already_claimed→ALREADY_CLAIMED；成功后 stats.hatchlings += 1，返回 pet/patch。
 6. 测试：内存 + Postgres 全链路；用可控时钟测过期；同键重放；错误命令拒绝；
    胜利首通/重复、失败无奖励、平局按失败；繁殖 start 各错误 + claim 三态。
 7. 更新 docs/ONLINE_DESIGN.md §16 端点表与流程。
@@ -292,3 +293,4 @@ docs/DOMAIN_MODEL.md §8/§9。
 | v1.9 | 2026-10-29 | 写入 A 第四批、D 第三批、B 第二批提示词；C 第三批前置更新 |
 | v1.10 | 2026-10-29 | 四批全部合入：A v1.4、D content 0.4.0、C 栖息地、B 列表/详情/繁殖 |
 | v1.11 | 2026-10-29 | contract-v1.5：写入 A 第五、C 第四、B 第三、D 第四完整批次提示词 |
+| v1.12 | 2026-10-29 | A 第五批合入；补充 E-02a/E-06a/E-07a/E-05a 口径；C 提示词补 hatchlings 与多余指令 |
