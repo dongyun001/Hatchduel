@@ -110,6 +110,52 @@ export function analyzeConfig(data: ConfigData): StaticAnalysis {
       return { stageId: stage.id, order: stage.order, firstClear, repeat, expectedFirst, expectedRepeat };
     });
 
+  // 奖励模板（contract-v1.5 E-05）：首通 pets 是蛋模板；repeat 不发宠物。
+  const eggToAdultHours = (data.breeding.hatchMs + data.breeding.juvenileMs) / 3_600_000;
+  checks.push({
+    id: 'rewards.egg.timing',
+    level: eggToAdultHours <= 3 ? 'pass' : 'warn',
+    detail: `首通蛋 ${data.breeding.hatchMs / 60_000}min 孵化 + ${data.breeding.juvenileMs / 3_600_000}h 幼年 = ${eggToAdultHours}h 到成年。`,
+  });
+  const firstClearPets: string[] = [];
+  for (const stage of data.stages) {
+    const first = stage.rewards.firstClear;
+    const repeat = stage.rewards.repeat;
+    if (repeat && ((repeat.pets?.length ?? 0) > 0 || (repeat.eggs?.length ?? 0) > 0)) {
+      checks.push({
+        id: `rewards.repeat.pets.${stage.id}`,
+        level: 'fail',
+        detail: `${stage.id} 的重复奖励含宠物/蛋；按 E-03 重复只发资源与经验。`,
+      });
+    }
+    if (first?.eggs && first.eggs.length > 0) {
+      checks.push({
+        id: `rewards.eggs.${stage.id}`,
+        level: 'warn',
+        detail: `${stage.id} 使用 rewards.eggs；MVP 约定用 pets 蛋模板（E-05）。`,
+      });
+    }
+    for (const pet of first?.pets ?? []) {
+      const speciesOk = data.species.some((species) => species.id === pet.speciesId);
+      const elementOk = data.elements.some((element) => element.id === pet.elementId);
+      const mvpOk = MVP_SPECIES_IDS.includes(pet.speciesId as (typeof MVP_SPECIES_IDS)[number]);
+      if (!speciesOk || !elementOk || !mvpOk) {
+        checks.push({
+          id: `rewards.firstClear.pet.${stage.id}`,
+          level: 'fail',
+          detail: `${stage.id} 首通蛋模板 ${pet.speciesId}/${pet.elementId} 不存在或非 MVP 物种。`,
+        });
+      } else {
+        firstClearPets.push(`${stage.id}: ${pet.speciesId}/${pet.elementId}`);
+      }
+    }
+  }
+  if (firstClearPets.length > 0) {
+    notes.push(
+      `首通宠物（蛋阶段交付）：${firstClearPets.join('、')}；${eggToAdultHours}h 到成年，可与“首通→孵化→繁殖”主循环衔接。`,
+    );
+  }
+
   // 难度曲线：敌方等级与基因质量应单调不减。
   const ordered = [...data.stages].sort((a, b) => a.order - b.order);
   for (let i = 1; i < ordered.length; i += 1) {
