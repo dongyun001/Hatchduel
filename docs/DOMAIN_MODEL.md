@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 项目代号 | PetBattle |
-| 文档版本 | v1.5 |
+| 文档版本 | v1.6 |
 | 日期 | 2026-10-28 |
 | 对应需求 | PRD v1.1 |
 | 状态 | 待评审 |
@@ -20,6 +20,7 @@
 | v1.3 | 2026-10-29 | contract-v1.2 D-01~D-07：releasePet 带 cfg、BreedResult.parentCooldowns、autoCommand、applyExp、栖息地两个可选字段、暴击倍率口径 |
 | v1.4 | 2026-10-29 | contract-v1.3 D-08~D-14：测试与生产数据解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 careRecoveryPerAction、hit 加法语义、inheritance.weight 标 reserved |
 | v1.5 | 2026-10-29 | contract-v1.4 D-16~D-18：applyProfilePatch、startBreeding 编排与 BreedingError、技能回合冷却 |
+| v1.6 | 2026-10-29 | contract-v1.5 E-01~E-08：runBattle 重放、applyPveRewards 结算、claimBreeding 领取与错误表 |
 
 ---
 
@@ -1009,7 +1010,7 @@ interface Profile {
 
 ---
 
-## 15. 实现说明（contract-v1.4，A 会话）
+## 15. 实现说明（contract-v1.5，A 会话）
 
 > 本节只记录 `packages/core` 的实现口径，不改变 §1~§13 的产品规则。
 
@@ -1126,3 +1127,42 @@ interface Profile {
 - cast 成功（含未命中）后写入 `cooldown + 1`；每回合开始对所有存活单位递减，减到 0 即删除；
 - `availableCommands` 跳过剩余 > 0 的技能；`submit` 也会拒绝（防止绕过）；
 - 没有 cooldown 配置的战斗不会创建该字段，事件流与旧版本逐条一致（确定性指纹不变）。
+
+### 15.12 战斗重放（E-02/E-08）
+
+`runBattle(setup, cfg, commands) → { winner, turns, events }`：用 `BattleEngine.create(setup, cfg)` 从零按顺序
+`submit` 客户端提交的完整指令序列。
+
+- 指令非法（回合不符 / 不是当前行动者 / 目标或精力不合法）→ `BattleReplayError('invalid_command')`；
+- 指令用尽仍未 `finished` → `BattleReplayError('not_finished')`；
+- 结束后多余指令忽略；30 回合上限仍然生效（平局 `winner = null, turns = 30`）；
+- `events` 是完整事件流（含 `battleStart` / `energyTick` / `battleEnd`），与 `state.log` 一致。
+
+### 15.13 PvE 奖励（E-03~E-06）
+
+`applyPveRewards(profile, stage, ctx, now, cfg) → { profile, patch, rewards }`，`ctx` 为
+`{ firstClear, winner, partyPetIds, turns }`（`firstClear` 由服务端按 `stageProgress` 计算）。
+
+| 情况 | 处理 |
+|---|---|
+| `winner === 0` | 发 `firstClear ? stage.rewards.firstClear : repeat` 的 `resources` 与 `petExp`；首通额外发 `pets`；`stats.battlesWon + 1` |
+| `winner === 1` 或 `null` | 不发任何奖励（平局按失败计）；`stats.battlesLost + 1`；`stageProgress` 不变 |
+| 经验 | 只给 `partyPetIds` 中仍存在且非蛋的宠物，每只按 `petExp` 走 `applyExp`；缺失/已放生跳过 |
+| 首通宠物 | `createPet` 蛋阶段交付：四项基因 50、generation 1、parents `[null,null]`、traits 空；性别按发放序号 0=male / 1=female（配置 `gender` 优先）；直接进 `profile.pets`，**不**进 `breeding.eggs`；id = `reward_{stageId}_{index}` |
+| 图鉴 | 敌方每个 `species:element` 标 `seen=true`（胜负都标）；发放宠物 `seen/owned=true`、`bestGene ≥ 50` |
+| 关卡进度 | 胜利时 `cleared=true`、`bestTurns = min(旧值, turns)`、首通写 `firstClearAt=now` |
+
+`patch` 保持输入 revision；不推进时间、不改 `lastEvaluatedAt`。
+
+### 15.14 繁殖领取（E-07）
+
+`claimBreeding(profile, eggId, now, cfg) → { profile, patch, pet }`：
+
+| 情况 | 结果 |
+|---|---|
+| `profile.pets[eggId]` 不存在 | `BreedingClaimError('not_found')` |
+| 仍在 `breeding.eggs` 且 `stage === 'egg'` | `BreedingClaimError('egg_not_ready')`（服务端应先 `advanceProfile` 让蛋孵化） |
+| 不在 `breeding.eggs` 但宠物存在 | `BreedingClaimError('already_claimed')` |
+| 在 eggs 且已非蛋 | 从 eggs 移除，返回该个体（不改 stage、不改时间） |
+
+`now < lastEvaluatedAt` 抛 `TimeError`；patch 保持输入 revision；不推进时间。
