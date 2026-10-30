@@ -17,10 +17,10 @@
 
 | 会话 | 状态 | 下一步 |
 |---|---|---|
-| A | **第四批已完成并合入**（v1.4） | 下一批：PvE battle session/奖励口径、繁殖 claim、PvP 编排 |
-| D | **第三批已完成并合入**（content 0.4.0、双 AI、真实路径） | 下一批：按 P-116/BALANCE 微调；hit 特质如需要加法量级 |
-| C | **第三批已完成并合入**（栖息地端点 + 放生闭环） | 下一批：`/breeding/*`（用 startBreeding）、PvE session |
-| B | **第二批已完成并合入**（列表/详情/繁殖、真实建体） | 下一批：繁殖接口联调、UI 打磨、Steam/微信适配细节 |
+| A | 第四批已完成并合入（v1.4） | **第五批待做**（v1.5）：runBattle/applyPveRewards/claimBreeding（§6） |
+| D | 第三批已完成并合入 | **第四批待做**：奖励模板核对与最终平衡（可与 A 并行） |
+| C | 第三批已完成并合入 | **第四批待做**：PvE 会话 + 繁殖端点（等 A 第五批） |
+| B | 第二批已完成并合入 | **第三批待做**：PvE 与繁殖完整交互（等 C 第四批） |
 | E | 暂停 | 美术不参与本轮 |
 
 - 可同时跑 **3~4 个**（A、D、C，加 B 装好编辑器后）；上限 4（COLLABORATION §1）。
@@ -82,139 +82,128 @@
 
 ---
 
-## 2. C —— 服务端（第三批：栖息地操作）
+## 2. C —— 服务端（第四批：PvE 会话与繁殖端点）
 
-工作目录：`D:\github-mine\petbattle-server`（分支 `wt/server`）。**前置已满足：A 第三批已合并到 main `29c258c`**（core 有 `movePetToHabitat`/`feedPet`/`cleanPet`/`playWithPet`/`upgradeHabitat`/`collectHabitat`，protocol 已有 `/habitat/move`）。先 `git merge main` 并确认这些导出存在。
+工作目录：`D:\github-mine\petbattle-server`（分支 `wt/server`）。**前置：A 第五批已合并**（`runBattle`/`applyPveRewards`/`claimBreeding` 存在）。先 `git merge main` 并确认导出；缺就报告，不要自己实现领域规则。
 
 ```
-你继续负责 PetBattle 的 C 服务端会话，做第三批：栖息地与放生闭环。
+你继续负责 PetBattle 的 C 服务端会话，做第四批：PvE 会话/奖励与繁殖端点。按 order 一次做完。
 
 工作目录：D:\github-mine\petbattle-server（分支 wt/server）。
-开工前先 git merge main（contract-v1.3；A 第三批应已合入）。先确认 @petbattle/core 导出：
-movePetToHabitat / feedPet / cleanPet / playWithPet / upgradeHabitat / collectHabitat，
-以及 ROUTES.movePetToHabitat。缺任何一个就先报告，不要自己实现领域规则。
+开工前先 git merge main（contract-v1.5；A 第五批已合入）。确认 @petbattle/core 导出：
+runBattle / applyPveRewards / claimBreeding / buildPveBattleSetup / startBreeding /
+BattleReplayError / BreedingClaimError，以及 protocol 的 BATTLE_EXPIRED / EGG_NOT_READY / expiresAt。
+缺任何一个先报告。
 只改：server/**、docs/ONLINE_DESIGN.md。
 不要改：packages/**、client/**、tools/**、根配置、docs/CONTRACT.md。
 
-先读：docs/CONTRACT.md §4.3/§7.2（D-12/D-11）、docs/ONLINE_DESIGN.md §5.2、
-server/src/domain/{starter-profile,core-adapter,patch}.ts、packages/core/src/api.ts。
+先读：docs/CONTRACT.md §7.4（E-01~E-08）、§4.3；docs/ONLINE_DESIGN.md §5.2/§6；
+server/src/{storage,services,routes,domain}/**、server/src/storage/migrations/001_init.sql。
 
 任务：
-1. POST /habitat/move（新端点）：调用 core movePetToHabitat(profile, petId, habitatId|null, now, cfg)；
-   返回 patch；校验容量/归属/非蛋/槽位去重由 core 负责，服务端只做参数与 revision/幂等。
-2. POST /habitat/collect：调用 core collectHabitat，把 stored 转入 currencies；返回 collected。
-3. POST /habitat/feed、/clean、/play、/upgrade：分别调用对应 core 函数；
-   - 食物不足/资源不足映射 INSUFFICIENT_RESOURCES；
-   - 容量满映射 CAPACITY_FULL；等级上限映射 VALIDATION_FAILED；
-   - 统一走既有写流水线（advanceProfile → 端点改动 → revision CAS → patch）。
-4. 放生闭环：初始 3 只在栖息地中；新增 move 后：
-   测试“初始档 → move 移出 → release 成功”，并覆盖 release 的 in_habitat / in_lineup /
-   in_defense（A 第三批新增）→ PET_IN_USE 映射。
-5. Postgres 端到端测试改用真实接口，不再手工改 profiles.data：
-   guest 登录 → move 移出 → release → 重启后 GET /profile 少一只、codex owned 不回退。
-6. 生产默认 strict 保持；更新 docs/ONLINE_DESIGN.md §16 端点表与流水线说明。
-
-A 第三批已提供（HabitatError.name === 'HabitatError'，带 code）：
-- pet_not_found → PET_NOT_FOUND(404)
-- habitat_not_found / food_not_found → NOT_FOUND(404)
-- capacity_full → CAPACITY_FULL(409)
-- insufficient_resources → INSUFFICIENT_RESOURCES(409)
-- egg_not_allowed / max_level / slot_conflict → VALIDATION_FAILED(400)
-
-注意：`collectHabitat` 只返回 `{ profile, patch }`，`collected` 必须在调用前快照
-`habitat.stored`（整数部分）算出来；`feed/clean/play` 当前允许宠物不在栖息地（默认恢复量），
-先按现状接，是否限制为“栖息地内互动”等产品确认。`in_defense` 映射已由 A 加在
-`server/src/errors.ts`（一行），本批确认保留即可。
+1. BattleSession 存储（内存 + Postgres 迁移 002）：
+   字段 battleId/accountId/stageId/seed/setup/partyPetIds/createdAt/expiresAt/status(started|claimed)；
+   TTL 30 分钟；同一账号只保留 1 个未结束会话，start 时使旧会话失效。
+2. POST /battle/pve/start：
+   - 校验关卡解锁（order=1 或前一关 cleared）→ STAGE_LOCKED；
+   - 校验 lineup 1~3 只、非蛋、存在 → INVALID_LINEUP；
+   - party = lineup 对应 PetInstance；buildPveBattleSetup(party, stage, cfg, seed)；
+     seed 由服务器生成（crypto），不得由客户端指定；
+   - 落 session，返回 { battleId, stageId, setup, expiresAt }。
+3. POST /battle/pve/claim：
+   - 幂等键；session 不存在→BATTLE_NOT_FOUND；过期→BATTLE_EXPIRED；已领取（不同键）→ALREADY_CLAIMED；
+   - runBattle(setup, cfg, commands) 重放；invalid_command/not_finished→VALIDATION_FAILED；
+   - firstClear = winner===0 && !stageProgress.cleared；
+   - applyPveRewards(profile, stage, {firstClear, winner, partyPetIds, turns}, now, cfg)；
+   - 会话置 claimed；返回 patch/winner/rewards；重复同键返回同一响应。
+4. POST /breeding/start：调 startBreeding；BreedingError 映射：
+   not_adult/same_pet/same_gender/infertile→VALIDATION_FAILED；cooldown→COOLDOWN_ACTIVE；
+   no_capacity→CAPACITY_FULL；cost→INSUFFICIENT_RESOURCES；locked→PET_LOCKED；
+   返回 egg/inbred/patch。
+5. POST /breeding/claim：调 claimBreeding；not_found→NOT_FOUND；egg_not_ready→EGG_NOT_READY；
+   already_claimed→ALREADY_CLAIMED；成功返回 pet/patch。
+6. 测试：内存 + Postgres 全链路；用可控时钟测过期；同键重放；错误命令拒绝；
+   胜利首通/重复、失败无奖励、平局按失败；繁殖 start 各错误 + claim 三态。
+7. 更新 docs/ONLINE_DESIGN.md §16 端点表与流程。
 
 专项验收：
 - pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config 通过。
-- 内存 + Postgres 各跑一次“登录 → 移出 → 放生 → 重启读档”链路。
-- 所有写操作带 Idempotency-Key + X-Base-Revision；重复请求返回同一结果。
-- 不改 core 规则；缺函数按 CONTRACT §9.3 提请求。
+- 内存 + Postgres 各跑一次：登录 → start → 本地/脚本生成 commands → claim → 再 claim；
+  以及 繁殖 start → 等孵化（推进时间）→ claim。
+- 所有写操作 Idempotency-Key + X-Base-Revision；客户端不提交胜负结果。
+- 不复制 core 规则；缺函数按 CONTRACT §9.3 提请求。
 
-不要做：繁殖、战斗/PvE、PvP 端点（breeding 编排与 battle session 还没定）；
-`/battle/pve/start` 等 A 的 buildPveBattleSetup 合并后再接。
+不要做：PvP 编排、排行榜、好友；这些不在本批。
 
-汇报 AGENTS.md §7，额外列出：本批用到的 core 函数、剩余端点缺口、Postgres 验证结果。
+汇报 AGENTS.md §7，额外列出：会话表结构、错误映射、Postgres 验证、剩余端点缺口。
 ```
 
-## 3. D —— 内容与数值（第三批：解锁水/土、真实路径、sim AI 口径）
+## 3. D —— 内容与数值（第四批：奖励模板与最终平衡）
 
-工作目录：`D:\github-mine\petbattle-content`（分支 `wt/content`）。开工前先 `git merge main`（`29c258c`，A 第三批已合并，测试已与生产数据解耦）。
+工作目录：`D:\github-mine\petbattle-content`（分支 `wt/content`）。开工前先 `git merge main`（`contract-v1.5`）。
 
 ```
-你继续负责 PetBattle 的 D 内容与数值会话，做第三批。
+你继续负责 PetBattle 的 D 内容与数值会话，做第四批：奖励模板核对与最终平衡。
 
 工作目录：D:\github-mine\petbattle-content（分支 wt/content）。
-开工前先 git merge main（29c258c；core 测试已切到合成配置，A 的 autoCommand 已改留能量策略）。
+开工前先 git merge main（contract-v1.5；PvE 首通宠物按蛋阶段交付）。
 只改：packages/core/src/config/data/**、packages/sim/**、tools/content/**、docs/BALANCE.md。
-不要改：core 其他源码、schema.ts、protocol、server、client、根配置、docs/CONTRACT.md。
-
-先读：
-- docs/CONTRACT.md §6、§7.2（D-08~D-15）
-- docs/PITFALLS.md P-049（sim 自带 AI 与 core autoCommand 漂移）
-- docs/BALANCE.md §2（目标表）、packages/sim/src/{battle,breeding,report}.ts
+不要改：core 源码、schema、protocol、server、client、根配置、docs/CONTRACT.md。
 
 任务：
-1. 解锁水/土系：A 的测试不再锁 normal_strike / stage_1，可调 water_* / earth_* / fish_tide 的 power 与
-   stage_1 敌人（允许 2~3 个）；目标仍是 BALANCE §2：
-   关1 ≥0.85、关2 0.70、关3 0.55、关4 0.45、关5 0.35~0.60（±0.15），平均 6~18 回合。
-   当前 stage_1 平均 3.70 回合偏短，明确处理方式（加敌人/调等级/调基因）并记录理由。
-2. habitats.json：hungerPenaltyWhenNoFoodPerHour 改为 1.5；补 careRecoveryPerAction { clean: 20, play: 20 }；
-   contentVersion 升 0.4.0。
-3. P-049：给 sim 增加 `--ai=core|sim`（core 用 engine.autoCommand 驱动；sim 保留现有 pickCommand），
-   或至少让报告明确标注曲线来自哪套策略。两套结果都输出更好。
-4. 用“真实玩家路径”复跑：明确重复刷关次数、繁殖次数、等级假设；7 天资源曲线加入喂养/繁殖/升级支出
-   （可以按典型路径近似），不要只算被动产出。
-5. 繁殖样本加到 5000 次，复核近亲突变率与基因分布；如果给特质加 hit，必须是加法量级 0.02~0.05，
-   不能写 1.05 这类乘数（会被 clamp）。
-6. 跑 pnpm sim --write 更新 BALANCE；确保 validate:config / typecheck / test / lint 通过。
+1. 核对 stage.rewards：
+   - firstClear.pets 是首通蛋模板（species/element 必须存在、只用 MVP 5 物种）；
+   - repeat 不发 pets；petExp 满足首通 30+order×10、重复 floor(首通/3)；
+   - 首通蛋（stage_2 火猫、stage_4 土蛇）与孵化/幼年节奏（30min/2h）能接上主循环。
+2. 双 AI 曲线定口径：明确 BALANCE 以 core AI（自动战斗/PvP 防守）还是 sim AI（人类近似）为主目标；
+   stage_4 当前 sim 0.321 / core 0.597 跨度大，决定是否收窄并说明理由。
+3. 最终调参（只改数据）：分关胜率、平均回合、平局率、大招间隔、资源曲线仍按 BALANCE §2；
+   如需动 stage_1 敌人数量（2~3）或水/土系 power，直接改。
+4. contentVersion 升 0.5.0（有数据变更时）；跑 validate:config、typecheck、test、lint、sim --write。
+5. 更新 BALANCE：两套 AI 的结论、首通蛋节奏、调参前后对比。
 
-专项验收：
-- 分关胜率、回合数、平局率、大招间隔全部有数据；不达标项写原因与下一步。
-- 资源曲线无 NaN/Infinity、无负值、离线封顶生效；至少覆盖“只产出”和“真实路径”两种口径。
-- 近亲对照组非 0；5000 次样本的突变率/近亲率有置信区间说明。
-- 不新增未定义 JSON 字段；需要新字段按 CONTRACT §9.3 提请求。
-
-汇报 AGENTS.md §7，额外列出：调参前后对比、sim AI 口径、仍不达标项、需要 A/C 配合的点。
+汇报 AGENTS.md §7，额外列出：奖励模板核对结果、AI 口径决定、仍不达标项、需要 A/C 配合的点。
 ```
 
-## 4. B —— 客户端（第二批：详情/图鉴/繁殖 + 真实建体）
+## 4. B —— 客户端（第三批：PvE 与繁殖完整交互）
 
-工作目录：`D:\github-mine\petbattle-client`（分支 `wt/client`）。开工前先 `git merge main`（`29c258c`，core 已有 `createPet`/`applyExp`/栖息地操作）。
+工作目录：`D:\github-mine\petbattle-client`（分支 `wt/client`）。**前置：A 第五批、C 第四批已合并**（`/battle/pve/*`、`/breeding/*` 可用，core 有 `runBattle/applyPveRewards/claimBreeding/applyProfilePatch`）。先 `git merge main`，再跑 `node client/tools/sync-lib.mjs --check`，不一致就重新生成并提交。
 
 ```
-你继续负责 PetBattle 的 B 客户端会话，做第二批。
+你继续负责 PetBattle 的 B 客户端会话，做第三批：PvE 战斗与繁殖的完整交互。按 order 一次做完。
 
 工作目录：D:\github-mine\petbattle-client（分支 wt/client）。
-开工前先 git merge main（29c258c）；然后跑 node client/tools/sync-lib.mjs --check，
-不一致就运行 node client/tools/sync-lib.mjs 重新生成并提交（不要手改 assets/lib）。
-只改：client/**（assets/art、assets/audio 除外，美术暂停）。
+开工前先 git merge main（contract-v1.5；A/C 第五/四批已合入）；跑 node client/tools/sync-lib.mjs --check，
+不一致就 node client/tools/sync-lib.mjs 重新生成并提交。
+只改：client/**（assets/art、assets/audio 除外）。
 不要改：packages/**、server/**、tools/**、根配置、docs/CONTRACT.md。
 
-先读：
-- docs/CONTRACT.md §4/§7.2（D-12 栖息地端点、D-10 PvE setup）
-- docs/ART_SPEC.md §3/§8.3（列表/详情/繁殖的占位与尺寸）
-- packages/core/src/api.ts（createPet/applyExp/deriveStats/checkBreeding/isInbred/技能与配置）
-- client/assets/scripts/{app,platform,services,dev}/**
+先读：docs/CONTRACT.md §4.3/§7.4（PvE E-01~E-08、繁殖领取 E-07）、
+docs/ONLINE_DESIGN.md §16、packages/core/src/api.ts（runBattle/applyPveRewards/claimBreeding/applyProfilePatch）、
+packages/protocol/src/{battle,breeding}.ts。
 
 任务：
-1. mockProfile 改用 core：用 createPet 建水龟(公)/雷鱼(母)/草蛙，再按
-   `now - hatchMs - juvenileMs` + advanceProfile 推到成年；不要字面构造 PetInstance。
-2. PetList 场景：列表/筛选、状态图标、图鉴剪影（5×5 组合）、最佳基因；数据只读 store。
-3. PetDetail 场景：八项属性（deriveStats）、基因、特质（显性/隐性）、血统、相性/克制、技能列表。
-4. Breeding 场景：双亲选择、基因区间预览、近亲警告（checkBreeding/isInbred）、成本；
-   提交动作先走 mock，等 C 的 /breeding/* 就绪再切 ApiClient。
-5. ApiClient：把 Habitat 的收取/喂食/清理/玩耍/升级/移出接到 ROUTES/ApiContract（保留 mock 开关）；
-   验证 409 用 latestProfile 重建、serverTime 偏移。
-6. 导航与 store 扩展；占位图同尺寸/pivot；场景优先用编辑器保存，手写场景遵守 P-113。
-7. 验收：pnpm lint / typecheck / test（根）通过；node client/tools/sync-lib.mjs --check 通过；
-   node client/tools/typecheck.mjs 通过；WeChat 空包可导出。
+1. StageSelect + Battle 场景：
+   - 进入关卡前调 POST /battle/pve/start；展示敌方与相性/克制；
+   - 用 @petbattle/core 的 BattleEngine 在本地演出并按玩家选择收集指令；
+     自动战斗用 engine.autoCommand；完整 commands 按顺序保存；
+   - 战斗结束调 POST /battle/pve/claim 提交 { battleId, commands }；
+     用 core applyProfilePatch 应用返回 patch；展示 rewards/winner；
+   - 处理 BATTLE_EXPIRED（提示重开）、VALIDATION_FAILED（重开）、409（拉全量重建）。
+2. Breeding 场景接真实接口：
+   - 预览用 checkBreeding + isInbred；POST /breeding/start；展示蛋与孵化倒计时；
+   - 蛋孵化（advanceProfile 推进后 stage != egg）可 POST /breeding/claim；
+   - 映射 EGG_NOT_READY / ALREADY_CLAIMED / 资源不足等错误码。
+3. mock 模式（DEV_CONFIG.useServer=false）用同一套 core 函数本地跑：
+   runBattle 不需要服务端；繁殖用 startBreeding/claimBreeding 操作本地 profile，保证 UI 流程一致。
+4. ApiClient 增加这两个端点；幂等键、X-Base-Revision、serverTime、409 重建继续走既有实现。
+5. 导航/store 更新；占位图与中文字体沿用首批；场景优先编辑器保存（P-113）。
+6. 验收：pnpm lint / typecheck / test；node client/tools/sync-lib.mjs --check；
+   node client/tools/typecheck.mjs；WeChat 空包可导出；mock 与 server 两种模式各跑一次主流程。
 
-不要做：服务端业务逻辑、领域公式（deriveStats/checkBreeding 只调用）、复制 core/protocol 类型；
-app 层不直接调 wx.*。
+不要做：服务端规则、领域公式、PvP/排行榜/好友 UI；不直接调 wx.*；不复制 core/protocol 类型。
 
-汇报 AGENTS.md §7，额外列出：新增场景、mock 动作替换情况、仍缺的接口。
+汇报 AGENTS.md §7，额外列出：新增场景、真实接口联调结果、mock 与 server 的差异、仍缺的接口。
 ```
 
 ## 5. 启动检查清单（0 号已代做）
@@ -242,44 +231,49 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 
 ---
 
-## 6. A 第四批任务（繁殖编排、补丁应用、技能冷却）
+## 6. A 第五批任务（contract-v1.5：PvE 重放/奖励、繁殖领取）
 
-工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开工前先 `git merge main`（`29c258c`）。
+工作目录：`D:\github-mine\petbattle-core`（分支 `wt/core`）。开工前先 `git merge main`（`contract-v1.5`；协议已含 `BATTLE_EXPIRED`/`EGG_NOT_READY`/`expiresAt`/`PveRewards`）。
 
 ```
-你继续负责 PetBattle 的 A 核心领域会话，做第四批。
+你继续负责 PetBattle 的 A 核心领域会话，做第五批：PvE 重放/奖励与繁殖领取。按 order 一次做完。
 
-工作目录：D:\github-mine\petbattle-core（分支 wt/core）。开工前先 git merge main（29c258c）。
+工作目录：D:\github-mine\petbattle-core（分支 wt/core）。开工前先 git merge main（contract-v1.5）。
 只改：packages/core/src/**（除 config/data/**）、packages/core/test/**、docs/DOMAIN_MODEL.md。
 不要改：config/data/**、protocol、server、client、根配置、docs/CONTRACT.md。
 
-本批解决三件事：服务端组合 patch、繁殖编排、技能冷却。
+先读：docs/CONTRACT.md §7.4（E-01~E-08）、packages/core/src/{api,battle/*,exp,profile-patch}.ts、
+docs/DOMAIN_MODEL.md §8/§9。
 
 任务：
-1. applyProfilePatch(profile, patch): Profile（新增导出，纯函数）：
-   - remove 优先于 upsert（P-047）；同一 id 两边出现时删除生效；
-   - currencies 视为绝对值快照直接覆盖（文档写清，不做累加）；
-   - codex 只允许 false→true，不因放生回退；lineup/stageProgress/breeding/pvp/settings/stats 整体替换；
-   - 不校验 revision（调用方负责）；不修改入参。
-   测试：remove+upsert 同 id、currencies 覆盖、codex 不回退、空 patch。
-2. startBreeding(profile, parentAId, parentBId, now, cfg, rng): StartBreedingResult（新增导出）：
-   - 用 checkBreeding 校验；失败抛 BreedingError（新错误类型，reason 复用 BreedError）；
-   - 扣 breeding.cost（金币+食物），不足抛 BreedingError('cost')；
-   - 调 breed 生成 child；child 进 profile.pets 与 breeding.eggs；
-     父母 cooldownUntil 用 breed 返回的 parentCooldowns；stats.breeds += 1；
-   - 不推进时间（服务端先 advanceProfile）；返回 { profile, patch, child, inbred, parentCooldowns }，
-     patch 的 revision 保持输入值。
-   测试：成功、每种拒绝原因、资源不足、冷却写入、蛋进 breeding.eggs、近亲标记。
-3. 技能回合冷却：BattleUnit 增加可选 cooldowns?: Record<Id, number>；
-   回合开始递减、cast 后按 SkillConfig.cooldown 设置、availableCommands 过滤冷却中的技能；
-   无 cooldown 字段时行为不变。测试：冷却中不可选、到期恢复、确定性不变。
-4. 组合写回归（P-047）：advanceProfile 后接 startBreeding/feedPet 的 patch，按 applyProfilePatch 应用，
-   验证被删除的宠物不会复活、资源与冷却正确。
-5. 文档：DOMAIN §15 补 applyProfilePatch / startBreeding / 冷却规则；标注新增错误类型。
-6. 门槛：typecheck/test/lint/validate；test:coverage core ≥85%；确定性双跑一致。
+1. runBattle(setup: BattleSetup, cfg, commands: readonly Command[]): { winner, turns, events }
+   - 用 BattleEngine.create(setup, cfg)，按顺序 submit；
+   - 命令非法/不轮流/目标不合法 → BattleReplayError('invalid_command')；
+   - commands 用尽仍 phase!=finished → BattleReplayError('not_finished')；
+   - finished 后返回 winner/turns/事件序列；不得绕过 30 回合规则。
+2. applyPveRewards(profile, stage, ctx: { firstClear; winner; partyPetIds; turns }, now, cfg):
+   { profile, patch, rewards: PveRewards }
+   - winner===0：发 firstClear/repeat 的资源与 petExp；firstClear 发 stage.rewards.firstClear.pets；
+   - winner!==0（含平局）：不发奖励，stats.battlesLost++；
+   - 首通宠物用 createPet 以蛋阶段交付：四项基因 50、generation 1、parents null、traits 空，
+     性别按发放序号交替（0=male,1=female），加入 profile.pets，不进 breeding.eggs；
+   - 对 partyPetIds 中仍存在的宠物 applyExp(petExp)，缺失跳过；
+   - stageProgress：胜利时 cleared=true、firstClearAt（首通时写）、bestTurns=min；
+   - codex：敌方 species:element seen=true；发放宠物 seen/owned=true、bestGene=50；
+   - stats.battlesWon++（胜利）；返回 patch（revision 保持输入值）；不推进时间。
+3. claimBreeding(profile, eggId, now, cfg): { profile, patch, pet }
+   - 宠物缺失→BreedingClaimError('not_found')；
+   - 仍在 breeding.eggs 且 stage==='egg'→'egg_not_ready'；
+   - 不在 eggs 但宠物存在→'already_claimed'；
+   - 成功从 eggs 移除，返回 pet；不改 stage；不推进时间。
+4. 导出：BattleReplayError、PveRewardContext/PveRewardResult、BreedingClaimError、ClaimBreedingResult。
+5. 测试：胜负平、首通/重复、经验只给仍存在队员、首通蛋确定性与性别、codex、bestTurns、
+   patch 正确；繁殖领取三种错误 + 成功。
+6. 门槛：typecheck/test/lint/validate；coverage core ≥85%；确定性双跑一致。
+7. DOMAIN §15 补 runBattle/applyPveRewards/claimBreeding 的规则与错误表。
 
-不要做：battle session/奖励、PvP 编排、feed/clean/play 的栖息地限制（产品未定）、改 config/data。
-汇报 AGENTS.md §7，额外列出：新增导出、破坏性变化、C/B 接线注意、D 需要重跑的内容。
+不要做：服务端会话存储、PvP、排行榜、改数据。协议改动已完成，不要再动 protocol。
+汇报 AGENTS.md §7，额外列出：新增导出、破坏性变化、C/B 接线注意、D 需要知道的数据口径。
 ```
 
 ## 7. 变更记录
@@ -297,3 +291,4 @@ pnpm typecheck && pnpm test && pnpm lint && pnpm validate:config
 | v1.8 | 2026-10-29 | A 第三批合入；C 第三批补错误映射与 collected 口径；D 下一步更新 |
 | v1.9 | 2026-10-29 | 写入 A 第四批、D 第三批、B 第二批提示词；C 第三批前置更新 |
 | v1.10 | 2026-10-29 | 四批全部合入：A v1.4、D content 0.4.0、C 栖息地、B 列表/详情/繁殖 |
+| v1.11 | 2026-10-29 | contract-v1.5：写入 A 第五、C 第四、B 第三、D 第四完整批次提示词 |

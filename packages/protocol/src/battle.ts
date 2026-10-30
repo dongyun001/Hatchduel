@@ -8,9 +8,9 @@ import type {
   BattleEvent,
   BattleSetup,
   Command,
+  EpochMs,
   Id,
-  PetInstance,
-  ResourceBag,
+  PveRewards,
 } from '@petbattle/core';
 import type { ProfileWriteResponse } from './profile.js';
 
@@ -25,6 +25,8 @@ export interface StartPveBattleResponse {
   battleId: string;
   stageId: Id;
   setup: BattleSetup;
+  /** 会话过期时间；过期后 claim 返回 BATTLE_EXPIRED（默认 30 分钟）。 */
+  expiresAt: EpochMs;
 }
 
 /**
@@ -36,12 +38,11 @@ export interface ClaimPveBattleRequest {
   commands: Command[];
 }
 
-export interface BattleRewards {
-  resources?: ResourceBag;
-  petExp?: number;
-  pets?: PetInstance[];
-  firstClear: boolean;
-}
+/**
+ * 奖励结构唯一定义在 `@petbattle/core`（PveRewards）；这里只 re-export，
+ * 避免 core 反向依赖 protocol（PITFALLS P-030）。
+ */
+export type BattleRewards = PveRewards;
 
 export interface ClaimPveBattleResponse extends ProfileWriteResponse {
   winner: 0 | 1 | null;

@@ -100,6 +100,17 @@ export interface ReleaseResult {
   refund: ResourceBag;
 }
 
+/**
+ * PvE 奖励（contract-v1.5）。唯一定义在 core，protocol 以 `BattleRewards` re-export。
+ * `pets` 是首通直接发放的个体（以蛋阶段交付），repeat 不发。
+ */
+export interface PveRewards {
+  resources?: ResourceBag;
+  petExp?: number;
+  pets?: PetInstance[];
+  firstClear: boolean;
+}
+
 /** 繁殖编排结果（contract-v1.4 D-17）：`patch` 的 revision 保持输入值。 */
 export interface StartBreedingResult {
   profile: Profile;

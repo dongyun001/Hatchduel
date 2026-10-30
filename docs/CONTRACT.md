@@ -108,7 +108,7 @@ interface ApiResponse<T> {
 
 ### 4.2 错误码（`src/errors.ts`）
 
-`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`VALIDATION_FAILED`、`REVISION_CONFLICT`、`IDEMPOTENCY_CONFLICT`、`RATE_LIMITED`、`TIME_BACKWARDS`、`NOT_IMPLEMENTED`、`INTERNAL`、`CONFIG_INVALID`、`INSUFFICIENT_RESOURCES`、`CAPACITY_FULL`、`COOLDOWN_ACTIVE`、`PET_NOT_FOUND`、`PET_LOCKED`、`PET_IN_USE`、`EGG_NOT_RELEASABLE`、`LAST_ADULT`、`INVALID_LINEUP`、`STAGE_LOCKED`、`BATTLE_NOT_FOUND`、`BATTLE_FINISHED`、`ALREADY_CLAIMED`。
+`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`VALIDATION_FAILED`、`REVISION_CONFLICT`、`IDEMPOTENCY_CONFLICT`、`RATE_LIMITED`、`TIME_BACKWARDS`、`NOT_IMPLEMENTED`、`INTERNAL`、`CONFIG_INVALID`、`INSUFFICIENT_RESOURCES`、`CAPACITY_FULL`、`COOLDOWN_ACTIVE`、`PET_NOT_FOUND`、`PET_LOCKED`、`PET_IN_USE`、`EGG_NOT_RELEASABLE`、`EGG_NOT_READY`、`LAST_ADULT`、`INVALID_LINEUP`、`STAGE_LOCKED`、`BATTLE_NOT_FOUND`、`BATTLE_EXPIRED`、`BATTLE_FINISHED`、`ALREADY_CLAIMED`。
 
 只增不改；文案由客户端按 code 本地化，服务端 message 只用于日志。
 
@@ -208,6 +208,9 @@ contentVersion: string
 | `applyExp(pet, amount, cfg)` | 加经验并按 `expToNext` 循环升级（≤20 级），返回新个体（v1.2 新增） |
 | `validateConfig(input)` / `assertConfig(input)` | 配置校验 |
 | `applyProfilePatch(profile, patch)` | 纯函数：remove 优先于 upsert、currencies 覆盖、codex 不回退（v1.4） |
+| `runBattle(setup, cfg, commands)` | 从零重放指令到结束；非法/未结束抛 `BattleReplayError`；返回 `{winner, turns, events}`（v1.5） |
+| `applyPveRewards(profile, stage, ctx, now, cfg)` | 首通/重复/经验/首通蛋/图鉴/bestTurns；返回 `{profile, patch, rewards}`（v1.5） |
+| `claimBreeding(profile, eggId, now, cfg)` | 从 `breeding.eggs` 领取已孵化的蛋；错误 `BreedingClaimError`（v1.5） |
 | `startBreeding(profile, a, b, now, cfg, rng)` | 校验/扣费/产蛋/父母冷却/统计，返回 `{profile, patch, child, inbred, parentCooldowns}`（v1.4） |
 | `BattleEngine` | `create` / `availableCommands` / `submit` / `state` / `autoCommand(uid)`（v1.2）；技能回合冷却由 `BattleUnit.cooldowns?` 承载（v1.4） |
 
@@ -318,6 +321,24 @@ A 首批完成后提了 4 条变更请求和 3 条待明确项。裁定如下；
 | D-16 | 服务端/客户端都需要把 patch 应用到存档 | 新增 `applyProfilePatch(profile, patch): Profile` 纯函数；**remove 优先于 upsert**；`currencies` 按 patch 绝对值覆盖；`codex` 只允许 false→true；不校验 revision | A 实现 + 测试；C/B 复用 |
 | D-17 | 繁殖的校验、扣费、冷却、落蛋散在服务端 | 新增 `startBreeding(profile, aId, bId, now, cfg, rng): StartBreedingResult`，含 `BreedingError(reason: BreedError)`；服务端只负责 `advanceProfile → startBreeding → CAS` | A 实现；C 接 `/breeding/start` |
 | D-18 | `SkillConfig.cooldown` 未被引擎消费 | `BattleUnit.cooldowns?: Record<Id, number>`；回合开始递减、cast 后设置、`availableCommands` 过滤冷却中的技能；无该字段时行为不变 | A 实现 + 测试 |
+
+---
+
+### 7.4 PvE 会话/奖励与繁殖领取（contract-v1.5，2026-10-29）
+
+> 本节关闭 §10 的两个未决项。协议已先行落地：错误码 `BATTLE_EXPIRED` / `EGG_NOT_READY`，
+> `StartPveBattleResponse.expiresAt`，`BattleRewards` 改为 re-export core 的 `PveRewards`。
+
+| 编号 | 议题 | 裁定 |
+|---|---|---|
+| E-01 | PvE 会话生命周期 | 服务端持有 `BattleSession { battleId, accountId, stageId, seed, setup, partyPetIds, createdAt, expiresAt, status }`；**TTL 30 分钟**；同一账号同时只有 1 个未结束会话，再次 `start` 使旧会话失效；`start` 校验关卡解锁（order=1 或前一关 cleared）与 lineup（1~3 只、非蛋、存在），失败 `STAGE_LOCKED` / `INVALID_LINEUP` |
+| E-02 | claim 校验 | 客户端提交**完整有序 commands**；服务端用 `setup + seed` 从零重放（core `runBattle`），必须 `finished`，否则 `VALIDATION_FAILED`；不接受客户端结果；过期 `BATTLE_EXPIRED`；不同幂等键重复领取 `ALREADY_CLAIMED`；battleId 不存在 `BATTLE_NOT_FOUND` |
+| E-03 | 首通/重复 | 只有 `winner===0` 发奖；loss/draw 不发（平局按失败计），`battlesLost++`；`firstClear = winner===0 && !stageProgress.cleared`；更新 `cleared/bestTurns/firstClearAt`（bestTurns 取胜场最小值） |
+| E-04 | 经验 | 用 `start` 时的 lineup 快照；claim 时仍存在的宠物才加经验（已放生/缺失跳过，不报错）；每只都按对应档 `petExp` 用 `applyExp` |
+| E-05 | 首通宠物 | `rewards.pets` 以**蛋阶段**交付：`createPet`（四项基因 50、generation 1、parents null、traits 空），性别按发放序号确定性交替（0=male,1=female）；加入 `profile.pets`，**不**进 `breeding.eggs`；`rewards.eggs` 保留但 MVP 不使用 |
+| E-06 | 图鉴 | claim 时敌方每个 `species:element` 标 `seen=true`；发放的宠物标 `seen/owned=true`、`bestGene=50` |
+| E-07 | 繁殖领取 | `eggId` 必须在 `breeding.eggs`；宠物缺失 `NOT_FOUND`；仍是蛋 `EGG_NOT_READY`(409)；已领取（不在 eggs 但宠物存在）`ALREADY_CLAIMED`(409)；成功后从 eggs 移除并返回 pet；幂等键重放返回同一结果；领取不做阶段推进（服务端先 `advanceProfile`） |
+| E-08 | core 签名 | `runBattle(setup, cfg, commands): { winner, turns, events }` + `BattleReplayError('invalid_command'|'not_finished')`；`applyPveRewards(profile, stage, { firstClear, winner, partyPetIds, turns }, now, cfg): { profile, patch, rewards }`；`claimBreeding(profile, eggId, now, cfg): { profile, patch, pet }` + `BreedingClaimError('not_found'|'egg_not_ready'|'already_claimed')` |
 
 ---
 
@@ -537,3 +558,4 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | contract-v1.2 | 2026-10-29 | core 签名集中调整（D-01~D-07）：`releasePet` 加 cfg、`BreedResult.parentCooldowns`、`BattleEngine.autoCommand`、`applyExp`、栖息地两个可选配置字段；协议不变 |
 | contract-v1.3 | 2026-10-29 | 解除 D/C 阻塞（D-08~D-15）：测试解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 `/habitat/move` 端点、`hit` 修正 |
 | contract-v1.4 | 2026-10-29 | 预裁定第四批（D-16~D-18）：`applyProfilePatch`、`startBreeding`、技能回合冷却 |
+| contract-v1.5 | 2026-10-29 | 关闭 PvE 与繁殖领取未决项（E-01~E-08）：会话 TTL/重放/奖励/首通蛋/图鉴/繁殖领取；新增两个错误码与 `expiresAt` |
