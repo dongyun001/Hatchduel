@@ -10,8 +10,17 @@
  *
  * 服务端只决定“能不能做”，结果由 core 计算；端点不得自己改资源/宠物数值。
  */
-import type { PetId, PetInstance, Profile, ProfilePatch, ResourceBag, ResourceId } from '@petbattle/core';
 import type {
+  HabitatId,
+  PetId,
+  PetInstance,
+  Profile,
+  ProfilePatch,
+  ResourceBag,
+  ResourceId,
+} from '@petbattle/core';
+import type {
+  CollectHabitatResponse,
   ProfileWriteResponse,
   ReleasePetResponse,
   RevisionConflictDetails,
@@ -98,6 +107,36 @@ export interface SetLineupParams {
   baseRevision: number;
   now: number;
   requestId?: string;
+}
+
+export interface PetCareParams {
+  accountId: string;
+  petId: PetId;
+  baseRevision: number;
+  now: number;
+  requestId?: string;
+}
+
+export interface FeedPetParams extends PetCareParams {
+  foodId: string;
+}
+
+export interface MovePetParams extends PetCareParams {
+  habitatId: HabitatId | null;
+}
+
+export interface HabitatWriteParams {
+  accountId: string;
+  habitatId: HabitatId;
+  baseRevision: number;
+  now: number;
+  requestId?: string;
+}
+
+export interface CollectWriteResult {
+  data: CollectHabitatResponse;
+  revision: number;
+  collected: ResourceBag;
 }
 
 export class ProfileService {
@@ -249,6 +288,140 @@ export class ProfileService {
     return toWriteResult(profile, patch, now);
   }
 
+  /**
+   * 放入 / 移出栖息地（`habitatId = null` 表示移出）。
+   * 容量、归属、非蛋、槽位唯一都由 `core.movePetToHabitat` 校验（DOMAIN §15.7），
+   * 服务端只负责鉴权、revision、幂等与落库。
+   */
+  async movePet(params: MovePetParams): Promise<ProfileWriteResult> {
+    const { accountId, petId, habitatId, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'habitat.move',
+      auditDetail: { petId, habitatId },
+      mutate: async (current) => {
+        const result = this.deps.core.movePetToHabitat(current, petId, habitatId, now);
+        return { profile: result.profile, patch: result.patch };
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
+  /** 领取栖息地产出。core 只返回 patch，`collected` 由服务端在调用前按同一口径快照。 */
+  async collectHabitat(params: HabitatWriteParams): Promise<CollectWriteResult> {
+    const { accountId, habitatId, baseRevision, now, requestId } = params;
+
+    let collected: ResourceBag = {};
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'habitat.collect',
+      auditDetail: { habitatId },
+      mutate: async (current) => {
+        // 与 core 同源同口径：整数部分入账，小数零头留在 stored（DOMAIN §15.7）。
+        collected = snapshotCollectable(current, habitatId);
+        const result = this.deps.core.collectHabitat(current, habitatId, now);
+        return { profile: result.profile, patch: result.patch };
+      },
+    });
+
+    const data: CollectHabitatResponse = {
+      patch,
+      revision: profile.revision,
+      serverTime: now,
+      collected,
+    };
+    return { data, revision: profile.revision, collected };
+  }
+
+  /** 喂食：扣食物成本、恢复 hunger/mood（规则在 core）。 */
+  async feedPet(params: FeedPetParams): Promise<ProfileWriteResult> {
+    const { accountId, petId, foodId, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'habitat.feed',
+      auditDetail: { petId, foodId },
+      mutate: async (current) => {
+        const result = this.deps.core.feedPet(current, petId, foodId, now);
+        return { profile: result.profile, patch: result.patch };
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
+  /** 清洁：恢复 hygiene（恢复量由配置/careRecovery 决定）。 */
+  async cleanPet(params: PetCareParams): Promise<ProfileWriteResult> {
+    const { accountId, petId, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'habitat.clean',
+      auditDetail: { petId },
+      mutate: async (current) => {
+        const result = this.deps.core.cleanPet(current, petId, now);
+        return { profile: result.profile, patch: result.patch };
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
+  /** 陪玩：恢复 mood。 */
+  async playWithPet(params: PetCareParams): Promise<ProfileWriteResult> {
+    const { accountId, petId, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'habitat.play',
+      auditDetail: { petId },
+      mutate: async (current) => {
+        const result = this.deps.core.playWithPet(current, petId, now);
+        return { profile: result.profile, patch: result.patch };
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
+  /** 升级栖息地：扣配置成本、扩容量（成本/等级上限在 core 与配置）。 */
+  async upgradeHabitat(params: HabitatWriteParams): Promise<ProfileWriteResult> {
+    const { accountId, habitatId, baseRevision, now, requestId } = params;
+
+    const { profile, patch } = await this.runWrite({
+      accountId,
+      baseRevision,
+      now,
+      requestId,
+      auditAction: 'habitat.upgrade',
+      auditDetail: { habitatId },
+      mutate: async (current) => {
+        const result = this.deps.core.upgradeHabitat(current, habitatId, now);
+        return { profile: result.profile, patch: result.patch };
+      },
+    });
+
+    return toWriteResult(profile, patch, now);
+  }
+
   async runWrite(params: RunWriteParams): Promise<RunWriteResult> {
     const { accountId, baseRevision, now, mutate } = params;
     const { store, core, mutex, logger } = this.deps;
@@ -328,6 +501,25 @@ function addResources(
     next[resource] = (next[resource] ?? 0) + amount;
   }
   return next;
+}
+
+/**
+ * 领取前的可领取快照：只取整数部分（与 `collectHabitat` 同口径）。
+ * `collectHabitat` 不返回 `collected`（CONTRACT D-12 的返回值只含 profile/patch），
+ * 所以服务端按同一规则算一次；若 core 以后直接返回 `collected`，这里改成透传即可。
+ */
+function snapshotCollectable(profile: Profile, habitatId: HabitatId): ResourceBag {
+  const habitat = profile.habitats[habitatId];
+  if (habitat === undefined) return {};
+  const collected: ResourceBag = {};
+  for (const [resource, amount] of Object.entries(habitat.stored) as Array<
+    [ResourceId, number | undefined]
+  >) {
+    if (amount === undefined) continue;
+    const whole = Math.floor(amount);
+    if (whole > 0) collected[resource] = whole;
+  }
+  return collected;
 }
 
 function toWriteResult(profile: Profile, patch: ProfilePatch, now: number): ProfileWriteResult {

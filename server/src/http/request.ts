@@ -109,6 +109,20 @@ export function requireStringField(
   return trimmed;
 }
 
+/** 取可空字符串字段：`null` 表示显式清空（如把宠物移出栖息地），其余按必填字符串校验。 */
+export function requireNullableStringField(
+  source: Record<string, unknown>,
+  key: string,
+  options: StringFieldOptions,
+): string | null {
+  const value = source[key];
+  if (value === null) return null;
+  if (typeof value !== 'string') {
+    throw new AppError('VALIDATION_FAILED', `${options.label ?? key} 必须是字符串或 null`);
+  }
+  return requireStringField(source, key, options);
+}
+
 /** 取必填布尔字段；`"true"` 这类字符串不接受，避免客户端把语义猜错。 */
 export function requireBooleanField(source: Record<string, unknown>, key: string): boolean {
   const value = source[key];
