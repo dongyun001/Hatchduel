@@ -11,6 +11,8 @@ import type { ServerConfig } from '../config.js';
 import type { CoreAdapter } from '../domain/core-adapter.js';
 import type { Logger } from '../logger.js';
 import type { AuthService } from '../services/auth-service.js';
+import type { BattleService } from '../services/battle-service.js';
+import type { BreedingService } from '../services/breeding-service.js';
 import type { IdempotencyService } from '../services/idempotency.js';
 import type { ProfileService } from '../services/profile-service.js';
 import type { Store } from '../storage/types.js';
@@ -40,6 +42,8 @@ export interface ServerDeps {
   pvpSemaphore: Semaphore;
   auth: AuthService;
   profiles: ProfileService;
+  battles: BattleService;
+  breeding: BreedingService;
   idempotency: IdempotencyService;
 }
 

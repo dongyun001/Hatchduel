@@ -14,6 +14,7 @@ import type { AuthProvider } from '@petbattle/protocol';
 import type {
   AccountRecord,
   AuditEntry,
+  BattleSessionRecord,
   SessionRecord,
   Store,
   StoredResponse,
@@ -38,6 +39,7 @@ export class InMemoryStore implements Store {
   private readonly bindings = new Map<string, string>();
   private readonly profiles = new Map<string, Profile>();
   private readonly sessions = new Map<string, SessionRecord>();
+  private readonly battleSessions = new Map<string, BattleSessionRecord>();
   private readonly idempotency = new Map<string, StoredResponse>();
   private readonly audits: AuditEntry[] = [];
 
@@ -130,6 +132,34 @@ export class InMemoryStore implements Store {
     const internalKey = idempotencyKey(scope, key);
     if (this.idempotency.has(internalKey)) return;
     this.idempotency.set(internalKey, clone(value));
+  }
+
+  async createBattleSession(session: BattleSessionRecord): Promise<void> {
+    if (this.battleSessions.has(session.battleId)) {
+      throw new Error(`战斗会话已存在：${session.battleId}`);
+    }
+    this.battleSessions.set(session.battleId, clone(session));
+  }
+
+  async getBattleSession(battleId: string): Promise<BattleSessionRecord | undefined> {
+    const session = this.battleSessions.get(battleId);
+    return session === undefined ? undefined : clone(session);
+  }
+
+  /** 让账号下所有未结束会话立即失效：把 expiresAt 压到 now，claim 时按过期处理。 */
+  async invalidateActiveBattleSessions(accountId: string, now: number): Promise<void> {
+    for (const session of this.battleSessions.values()) {
+      if (session.accountId !== accountId) continue;
+      if (session.status !== 'started') continue;
+      if (session.expiresAt > now) session.expiresAt = now;
+    }
+  }
+
+  async markBattleSessionClaimed(battleId: string, _now: number): Promise<boolean> {
+    const session = this.battleSessions.get(battleId);
+    if (session === undefined || session.status !== 'started') return false;
+    session.status = 'claimed';
+    return true;
   }
 
   async appendAudit(entry: AuditEntry): Promise<void> {

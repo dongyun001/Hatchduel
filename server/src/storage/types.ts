@@ -8,7 +8,7 @@
  * - `saveProfile` 必须做 revision CAS，返回 false 表示冲突，由服务层转 `REVISION_CONFLICT`；
  * - 幂等结果按 `(scope, key)` 唯一，scope 是 accountId 或 `device:<deviceId>`。
  */
-import type { Profile } from '@petbattle/core';
+import type { BattleSetup, Id, PetId, Profile } from '@petbattle/core';
 import type { AccountBindings, AuthProvider } from '@petbattle/protocol';
 
 export type AccountStatus = 'active' | 'banned' | 'deleted';
@@ -73,30 +73,38 @@ export interface Store {
   getStoredResponse(scope: string, key: string, now: number): Promise<StoredResponse | undefined>;
   putStoredResponse(scope: string, key: string, value: StoredResponse): Promise<void>;
 
+  // PvE 战斗会话（contract-v1.5 E-01）
+  createBattleSession(session: BattleSessionRecord): Promise<void>;
+  getBattleSession(battleId: string): Promise<BattleSessionRecord | undefined>;
+  /** 让该账号所有未结束会话立即失效（expiresAt = now）；`start` 新会话前调用。 */
+  invalidateActiveBattleSessions(accountId: string, now: number): Promise<void>;
+  /** `started → claimed` 的 CAS；返回 false 表示已被领取或不存在。 */
+  markBattleSessionClaimed(battleId: string, now: number): Promise<boolean>;
+
   // 审计
   appendAudit(entry: AuditEntry): Promise<void>;
 
   close(): Promise<void>;
 }
 
+/** PvE 会话状态；过期不改状态，靠 `expiresAt` 判定（claim 时返回 BATTLE_EXPIRED）。 */
+export type BattleSessionStatus = 'started' | 'claimed';
+
 /**
- * 异步 PvP 战斗会话（CONTRACT §10.2 / `claimPveBattle` 重放模型）。
+ * PvE 战斗会话（CONTRACT §7.4 E-01）。
  *
- * M1 只落库接口与表结构，不实现：先存 `battleId → setup/seed`，未来按重放校验。
- * PvP 模拟必须走 `Semaphore` 限并发（TECH_DESIGN §16.1）。
+ * `setup` 是开战时的完整快照（含 seed）：claim 时用它从零重放，绝不引用实时宠物/配置，
+ * 避免“改了宠物或配置导致旧战报漂移”（PITFALLS P-027）。`partyPetIds` 用于发经验（E-04）。
  */
 export interface BattleSessionRecord {
-  id: string;
+  battleId: string;
   accountId: string;
-  kind: 'pve' | 'pvp';
+  stageId: Id;
   seed: number;
-  /** `BattleSetup` 的序列化快照；引用可变数据会导致旧战报漂移（PITFALLS P-027）。 */
-  setup: unknown;
+  setup: BattleSetup;
+  partyPetIds: PetId[];
   createdAt: number;
+  /** 默认 now + 30 分钟；过期后 claim 返回 BATTLE_EXPIRED。 */
   expiresAt: number;
-}
-
-export interface BattleSessionStore {
-  createBattleSession(session: BattleSessionRecord): Promise<void>;
-  getBattleSession(id: string): Promise<BattleSessionRecord | undefined>;
+  status: BattleSessionStatus;
 }

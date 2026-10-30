@@ -23,7 +23,6 @@ import type {
   CollectHabitatResponse,
   ProfileWriteResponse,
   ReleasePetResponse,
-  RevisionConflictDetails,
   SetLineupResponse,
 } from '@petbattle/protocol';
 
@@ -31,7 +30,7 @@ import type { KeyedMutex } from '../concurrency.js';
 import type { CoreAdapter } from '../domain/core-adapter.js';
 import { validateLineup } from '../domain/lineup.js';
 import { composePatch } from '../domain/patch.js';
-import { AppError } from '../errors.js';
+import { AppError, revisionConflictError } from '../errors.js';
 import type { Logger } from '../logger.js';
 import type { Store } from '../storage/types.js';
 
@@ -55,7 +54,10 @@ export interface RunWriteParams {
   now: number;
   requestId?: string;
   auditAction?: string;
-  auditDetail?: unknown;
+  /**
+   * 审计详情；传函数则在写入成功后求值（用于 claim 这类“结果在 mutate 里才确定”的场景）。
+   */
+  auditDetail?: unknown | (() => unknown);
   mutate: (profile: Profile, now: number) => Promise<MutationOutcome>;
 }
 
@@ -430,7 +432,7 @@ export class ProfileService {
       const current = await store.getProfile(accountId);
       if (current === undefined) throw new AppError('NOT_FOUND', '存档不存在');
 
-      if (current.revision !== baseRevision) throw revisionConflict(current, baseRevision);
+      if (current.revision !== baseRevision) throw revisionConflictError(current, baseRevision);
 
       const advanced = core.advanceProfile(current, now);
       const outcome = await mutate(advanced.profile, now);
@@ -442,7 +444,7 @@ export class ProfileService {
       if (!saved) {
         const latest = await store.getProfile(accountId);
         if (latest === undefined) throw new AppError('NOT_FOUND', '存档不存在');
-        throw revisionConflict(latest, baseRevision);
+        throw revisionConflictError(latest, baseRevision);
       }
 
       if (params.auditAction !== undefined) {
@@ -451,7 +453,7 @@ export class ProfileService {
             at: now,
             accountId,
             action: params.auditAction,
-            detail: params.auditDetail,
+            detail: resolveAuditDetail(params.auditDetail),
             requestId: params.requestId,
           });
         } catch (error) {
@@ -529,14 +531,6 @@ function toWriteResult(profile: Profile, patch: ProfilePatch, now: number): Prof
   };
 }
 
-function revisionConflict(latest: Profile, expected: number): AppError {
-  const details: RevisionConflictDetails = {
-    latestProfile: latest,
-    latestRevision: latest.revision,
-  };
-  return new AppError(
-    'REVISION_CONFLICT',
-    `revision 冲突：客户端 baseRevision=${expected}，服务器最新=${latest.revision}`,
-    { details },
-  );
+function resolveAuditDetail(detail: unknown | (() => unknown)): unknown {
+  return typeof detail === 'function' ? (detail as () => unknown)() : detail;
 }

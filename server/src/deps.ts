@@ -12,6 +12,8 @@ import type { ServerDeps } from './http/context.js';
 import { createConsoleLogger } from './logger.js';
 import type { Logger } from './logger.js';
 import { AuthService } from './services/auth-service.js';
+import { BattleService } from './services/battle-service.js';
+import { BreedingService } from './services/breeding-service.js';
 import { IdempotencyService } from './services/idempotency.js';
 import { ProfileService } from './services/profile-service.js';
 import type { Store } from './storage/types.js';
@@ -39,6 +41,8 @@ export function createDeps(options: CreateDepsOptions): ServerDeps {
       configRepo: options.configRepo,
     });
 
+  const profiles = new ProfileService({ store: options.store, core, mutex, logger });
+
   return {
     config: options.config,
     store: options.store,
@@ -56,7 +60,15 @@ export function createDeps(options: CreateDepsOptions): ServerDeps {
       refreshTokenTtlMs: options.config.refreshTokenTtlMs,
       configRepo: options.configRepo,
     }),
-    profiles: new ProfileService({ store: options.store, core, mutex, logger }),
+    profiles,
+    battles: new BattleService({
+      store: options.store,
+      core,
+      profiles,
+      logger,
+      sessionTtlMs: options.config.battleSessionTtlMs,
+    }),
+    breeding: new BreedingService({ core, profiles }),
     idempotency: new IdempotencyService(options.store, options.config.idempotencyTtlMs, mutex),
   };
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Profile } from '@petbattle/core';
+import type { BattleSetup, Profile } from '@petbattle/core';
 
 import { InMemoryStore } from '../src/storage/memory.js';
-import type { AccountRecord, StoredResponse } from '../src/storage/types.js';
+import type { AccountRecord, BattleSessionRecord, StoredResponse } from '../src/storage/types.js';
 
 function account(id: string, deviceId: string): AccountRecord {
   return {
@@ -135,5 +135,66 @@ describe('InMemoryStore：幂等与审计', () => {
     await store.appendAudit({ at: 1, accountId: 'acc_1', action: 'a' });
     await store.appendAudit({ at: 2, accountId: 'acc_1', action: 'b' });
     expect(store.listAudits().map((entry) => entry.action)).toEqual(['a', 'b']);
+  });
+});
+
+describe('InMemoryStore：PvE 战斗会话', () => {
+  const setup: BattleSetup = { seed: 9, teams: [[], []] };
+
+  function session(overrides: Partial<BattleSessionRecord> = {}): BattleSessionRecord {
+    return {
+      battleId: 'battle_1',
+      accountId: 'acc_1',
+      stageId: 'stage_1',
+      seed: 9,
+      setup,
+      partyPetIds: ['pet_1', 'pet_2'],
+      createdAt: 1000,
+      expiresAt: 2000,
+      status: 'started',
+      ...overrides,
+    };
+  }
+
+  it('创建后可按 id 读取，且返回深拷贝', async () => {
+    const store = new InMemoryStore();
+    await store.createBattleSession(session());
+
+    const loaded = await store.getBattleSession('battle_1');
+    expect(loaded?.stageId).toBe('stage_1');
+    expect(loaded?.partyPetIds).toEqual(['pet_1', 'pet_2']);
+
+    if (loaded === undefined) throw new Error('会话不存在');
+    loaded.partyPetIds.push('hacked');
+    expect((await store.getBattleSession('battle_1'))?.partyPetIds).toEqual(['pet_1', 'pet_2']);
+  });
+
+  it('重复 battleId 拒绝创建', async () => {
+    const store = new InMemoryStore();
+    await store.createBattleSession(session());
+    await expect(store.createBattleSession(session())).rejects.toThrow(/已存在/);
+  });
+
+  it('invalidate 只影响该账号未结束且未过期的会话', async () => {
+    const store = new InMemoryStore();
+    await store.createBattleSession(session());
+    await store.createBattleSession(session({ battleId: 'battle_other', accountId: 'acc_2' }));
+    await store.createBattleSession(session({ battleId: 'battle_claimed', status: 'claimed' }));
+
+    await store.invalidateActiveBattleSessions('acc_1', 1500);
+
+    expect((await store.getBattleSession('battle_1'))?.expiresAt).toBe(1500);
+    expect((await store.getBattleSession('battle_other'))?.expiresAt).toBe(2000);
+    expect((await store.getBattleSession('battle_claimed'))?.expiresAt).toBe(2000);
+  });
+
+  it('markClaimed 是 started→claimed 的 CAS', async () => {
+    const store = new InMemoryStore();
+    await store.createBattleSession(session());
+
+    expect(await store.markBattleSessionClaimed('battle_1', 1500)).toBe(true);
+    expect((await store.getBattleSession('battle_1'))?.status).toBe('claimed');
+    expect(await store.markBattleSessionClaimed('battle_1', 1600)).toBe(false);
+    expect(await store.markBattleSessionClaimed('battle_missing', 1600)).toBe(false);
   });
 });

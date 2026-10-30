@@ -4,9 +4,22 @@
  * 客户端只看 `code`，不解析文案；`message` 只用于日志与排障。
  * 未知异常一律 `INTERNAL 500`，不把堆栈/内部细节透给客户端。
  */
-import { ConfigValidationError, CoreNotImplementedError, ReleaseError, TimeError } from '@petbattle/core';
-import type { ReleaseErrorReason } from '@petbattle/core';
-import type { ApiErrorCode } from '@petbattle/protocol';
+import {
+  BattleReplayError,
+  BreedingClaimError,
+  BreedingError,
+  ConfigValidationError,
+  CoreNotImplementedError,
+  ReleaseError,
+  TimeError,
+} from '@petbattle/core';
+import type {
+  BreedingClaimErrorReason,
+  BreedingErrorReason,
+  Profile,
+  ReleaseErrorReason,
+} from '@petbattle/core';
+import type { ApiErrorCode, RevisionConflictDetails } from '@petbattle/protocol';
 
 /** 每个稳定错误码的默认 HTTP 状态；端点可显式覆盖。 */
 export const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
@@ -47,6 +60,29 @@ const RELEASE_ERROR_MAP: Record<ReleaseErrorReason, { status: number; code: ApiE
   in_habitat: { status: 409, code: 'PET_IN_USE' },
   in_defense: { status: 409, code: 'PET_IN_USE' },
   last_adult: { status: 409, code: 'LAST_ADULT' },
+};
+
+/** `BreedingError.reason` → 协议错误码（CONTRACT §7.4 / §8.3）。 */
+const BREEDING_ERROR_MAP: Record<BreedingErrorReason, { status: number; code: ApiErrorCode }> = {
+  not_found: { status: 404, code: 'NOT_FOUND' },
+  not_adult: { status: 400, code: 'VALIDATION_FAILED' },
+  same_pet: { status: 400, code: 'VALIDATION_FAILED' },
+  same_gender: { status: 400, code: 'VALIDATION_FAILED' },
+  infertile: { status: 400, code: 'VALIDATION_FAILED' },
+  cooldown: { status: 409, code: 'COOLDOWN_ACTIVE' },
+  no_capacity: { status: 409, code: 'CAPACITY_FULL' },
+  cost: { status: 409, code: 'INSUFFICIENT_RESOURCES' },
+  locked: { status: 409, code: 'PET_LOCKED' },
+};
+
+/** `BreedingClaimError.reason` → 协议错误码（CONTRACT §7.4 E-07）。 */
+const BREEDING_CLAIM_MAP: Record<
+  BreedingClaimErrorReason,
+  { status: number; code: ApiErrorCode }
+> = {
+  not_found: { status: 404, code: 'NOT_FOUND' },
+  egg_not_ready: { status: 409, code: 'EGG_NOT_READY' },
+  already_claimed: { status: 409, code: 'ALREADY_CLAIMED' },
 };
 
 /**
@@ -111,6 +147,19 @@ export interface MappedError {
   details?: unknown;
 }
 
+/** revision 冲突：带上最新快照，客户端丢弃本地乐观更新重建（CONTRACT §4.1）。 */
+export function revisionConflictError(latest: Profile, expected: number): AppError {
+  const details: RevisionConflictDetails = {
+    latestProfile: latest,
+    latestRevision: latest.revision,
+  };
+  return new AppError(
+    'REVISION_CONFLICT',
+    `revision 冲突：客户端 baseRevision=${expected}，服务器最新=${latest.revision}`,
+    { details },
+  );
+}
+
 export function mapError(error: unknown): MappedError {
   if (error instanceof AppError) {
     return { status: error.status, code: error.code, message: error.message, details: error.details };
@@ -127,6 +176,25 @@ export function mapError(error: unknown): MappedError {
   if (error instanceof ReleaseError) {
     const mapped = RELEASE_ERROR_MAP[error.reason];
     return { status: mapped.status, code: mapped.code, message: error.message };
+  }
+
+  if (error instanceof BreedingError) {
+    const mapped = BREEDING_ERROR_MAP[error.reason];
+    return { status: mapped.status, code: mapped.code, message: error.message };
+  }
+
+  if (error instanceof BreedingClaimError) {
+    const mapped = BREEDING_CLAIM_MAP[error.reason];
+    return { status: mapped.status, code: mapped.code, message: error.message };
+  }
+
+  if (error instanceof BattleReplayError) {
+    // 指令非法 / 重放未打完：都是“客户端提交的战斗过程无效”，不是服务器错误。
+    return {
+      status: STATUS_BY_CODE.VALIDATION_FAILED,
+      code: 'VALIDATION_FAILED',
+      message: error.message,
+    };
   }
 
   const habitatCode = readHabitatErrorCode(error);

@@ -11,23 +11,39 @@
 import {
   CoreNotImplementedError,
   advanceProfile as coreAdvanceProfile,
+  applyPveRewards as coreApplyPveRewards,
+  buildPveBattleSetup as coreBuildPveBattleSetup,
+  claimBreeding as coreClaimBreeding,
   cleanPet as coreCleanPet,
   collectHabitat as coreCollectHabitat,
   feedPet as coreFeedPet,
   movePetToHabitat as coreMovePetToHabitat,
   playWithPet as corePlayWithPet,
   releasePet as coreReleasePet,
+  runBattle as coreRunBattle,
+  startBreeding as coreStartBreeding,
   upgradeHabitat as coreUpgradeHabitat,
 } from '@petbattle/core';
 import type {
+  BattleEvent,
+  BattleSetup,
+  BattleWinner,
+  ClaimBreedingResult,
+  Command,
   ConfigRepo,
   EpochMs,
   HabitatId,
   Id,
   PetId,
+  PetInstance,
   Profile,
   ProfilePatch,
+  PveRewardContext,
+  PveRewardResult,
   ReleaseResult,
+  Rng,
+  StageConfig,
+  StartBreedingResult,
 } from '@petbattle/core';
 
 import { AppError } from '../errors.js';
@@ -64,6 +80,36 @@ export interface CoreAdapter {
   playWithPet(profile: Profile, petId: PetId, now: EpochMs): HabitatOpResult;
   upgradeHabitat(profile: Profile, habitatId: HabitatId, now: EpochMs): HabitatOpResult;
   collectHabitat(profile: Profile, habitatId: HabitatId, now: EpochMs): HabitatOpResult;
+
+  // PvE 与繁殖（contract-v1.5）。
+  /** 全部关卡配置（按 order 排序由调用方处理），用于解锁校验与奖励档查找。 */
+  allStages(): readonly StageConfig[];
+  buildPveBattleSetup(
+    party: readonly PetInstance[],
+    stage: StageConfig,
+    seed: number,
+  ): BattleSetup;
+  /** 从零重放；失败抛 `BattleReplayError`（invalid_command / not_finished）。 */
+  runBattle(
+    setup: BattleSetup,
+    commands: readonly Command[],
+  ): { winner: BattleWinner; turns: number; events: BattleEvent[] };
+  applyPveRewards(
+    profile: Profile,
+    stage: StageConfig,
+    ctx: PveRewardContext,
+    now: EpochMs,
+  ): PveRewardResult;
+  /** 失败抛 `BreedingError`（reason 见 CONTRACT §7.4 E-01/§8.3）。 */
+  startBreeding(
+    profile: Profile,
+    parentAId: PetId,
+    parentBId: PetId,
+    now: EpochMs,
+    rng: Rng,
+  ): StartBreedingResult;
+  /** 失败抛 `BreedingClaimError`。 */
+  claimBreeding(profile: Profile, eggId: PetId, now: EpochMs): ClaimBreedingResult;
 
   /** 是否曾经降级过；用于日志告警与运维排查。 */
   readonly degraded: boolean;
@@ -147,6 +193,30 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
 
     collectHabitat(profile, habitatId, now) {
       return coreCollectHabitat(profile, habitatId, now, requireRepo());
+    },
+
+    allStages() {
+      return requireRepo().allStages();
+    },
+
+    buildPveBattleSetup(party, stage, seed) {
+      return coreBuildPveBattleSetup(party, stage, requireRepo(), seed);
+    },
+
+    runBattle(setup, commands) {
+      return coreRunBattle(setup, requireRepo(), commands);
+    },
+
+    applyPveRewards(profile, stage, ctx, now) {
+      return coreApplyPveRewards(profile, stage, ctx, now, requireRepo());
+    },
+
+    startBreeding(profile, parentAId, parentBId, now, rng) {
+      return coreStartBreeding(profile, parentAId, parentBId, now, requireRepo(), rng);
+    },
+
+    claimBreeding(profile, eggId, now) {
+      return coreClaimBreeding(profile, eggId, now, requireRepo());
     },
 
     get degraded() {
