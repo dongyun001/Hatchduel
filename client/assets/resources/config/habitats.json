@@ -1,0 +1,88 @@
+[
+  {
+    "id": "meadow",
+    "name": "草甸",
+    "capacity": 4,
+    "elementBonus": {
+      "water": 0.15,
+      "grass": 0.15,
+      "earth": 0.1
+    },
+    "productionPerHour": [
+      {
+        "resource": "coin",
+        "amountPerHour": 12
+      },
+      {
+        "resource": "food",
+        "amountPerHour": 6
+      },
+      {
+        "resource": "geneDust",
+        "amountPerHour": 1
+      }
+    ],
+    "upkeepPerPetPerHour": [
+      {
+        "resource": "food",
+        "amountPerHour": 1
+      }
+    ],
+    "conditionDecayPerHour": {
+      "hunger": 3,
+      "mood": 2,
+      "hygiene": 2
+    },
+    "hungerPenaltyWhenNoFoodPerHour": 0,
+    "productionStageMul": {
+      "juvenile": 0.5,
+      "adult": 1,
+      "elder": 0.8
+    },
+    "healthDecayWhenStarving": 2,
+    "healthRecoveryPerHour": 4,
+    "offlineCapMs": 28800000,
+    "decayCapMs": 86400000,
+    "upgrade": {
+      "maxLevel": 3,
+      "levels": [
+        {
+          "level": 1,
+          "cost": [],
+          "capacity": 4,
+          "productionMul": 1
+        },
+        {
+          "level": 2,
+          "cost": [
+            {
+              "resource": "coin",
+              "amount": 500
+            },
+            {
+              "resource": "geneDust",
+              "amount": 20
+            }
+          ],
+          "capacity": 5,
+          "productionMul": 1.15
+        },
+        {
+          "level": 3,
+          "cost": [
+            {
+              "resource": "coin",
+              "amount": 1500
+            },
+            {
+              "resource": "geneDust",
+              "amount": 60
+            }
+          ],
+          "capacity": 6,
+          "productionMul": 1.3
+        }
+      ]
+    }
+  }
+]

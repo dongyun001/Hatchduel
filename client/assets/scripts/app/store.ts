@@ -5,7 +5,10 @@ import type { PlatformKind } from '../platform';
  * 单向数据流：UI 只读 `appStore.getState()`，动作通过 service 改 store。
  * 不引入状态机；服务端返回 `ProfilePatch` 时由 service 合并后整体写回。
  */
-export type ScreenId = 'boot' | 'home' | 'habitat';
+export type ScreenId = 'boot' | 'home' | 'habitat' | 'petList' | 'petDetail' | 'breeding';
+
+/** 宠物列表筛选（阶段维度）。 */
+export type PetFilter = 'all' | 'adult' | 'juvenile' | 'egg';
 
 export interface RemoteState {
   /** mock 模式为 false；连服务端成功后为 true。 */
@@ -20,6 +23,9 @@ export interface UiState {
   screen: ScreenId;
   toast: string | null;
   busy: boolean;
+  /** 列表/详情/栖息地共用的当前选中宠物。 */
+  selectedPetId: string | null;
+  petFilter: PetFilter;
 }
 
 export interface AppState {
@@ -42,6 +48,8 @@ const initialState: AppState = {
     screen: 'boot',
     toast: null,
     busy: false,
+    selectedPetId: null,
+    petFilter: 'all',
   },
 };
 
@@ -82,6 +90,14 @@ class Store {
 
   setBusy(busy: boolean): void {
     this.update((prev) => ({ ...prev, ui: { ...prev.ui, busy } }));
+  }
+
+  setSelectedPet(petId: string | null): void {
+    this.update((prev) => ({ ...prev, ui: { ...prev.ui, selectedPetId: petId } }));
+  }
+
+  setPetFilter(petFilter: PetFilter): void {
+    this.update((prev) => ({ ...prev, ui: { ...prev.ui, petFilter } }));
   }
 
   setRemote(remote: Partial<RemoteState>): void {

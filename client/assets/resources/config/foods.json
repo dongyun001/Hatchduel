@@ -1,0 +1,23 @@
+[
+  {
+    "id": "berry",
+    "name": "野果",
+    "cost": [{ "resource": "coin", "amount": 10 }],
+    "nutrition": 25,
+    "mood": 5
+  },
+  {
+    "id": "fish_snack",
+    "name": "小鱼干",
+    "cost": [{ "resource": "coin", "amount": 25 }],
+    "nutrition": 40,
+    "mood": 10
+  },
+  {
+    "id": "hearty_meal",
+    "name": "丰盛餐",
+    "cost": [{ "resource": "coin", "amount": 60 }],
+    "nutrition": 70,
+    "mood": 20
+  }
+]

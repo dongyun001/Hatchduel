@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /** 稳定错误码：客户端按 code 分支，不解析文案（TECH_DESIGN §11.3）。 */
 export const API_ERROR_CODES = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',

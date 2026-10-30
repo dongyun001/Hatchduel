@@ -74,8 +74,12 @@ export class HomeController extends Component {
       place(card, (index - (pets.length - 1) / 2) * 380, 40);
     });
 
-    const enter = makeButton(root, '进入栖息地', 420, 96, frames.white, () => gotoScene('habitat'));
-    place(enter, 0, -320);
+    const toList = makeButton(root, '宠物列表', 400, 96, frames.white, () => gotoScene('petList'));
+    place(toList, -460, -320);
+    const toBreeding = makeButton(root, '繁殖', 400, 96, frames.white, () => gotoScene('breeding'));
+    place(toBreeding, 0, -320);
+    const enter = makeButton(root, '进入栖息地', 400, 96, frames.white, () => gotoScene('habitat'));
+    place(enter, 460, -320);
 
     const mode =
       state.remote.mode === 'mock'

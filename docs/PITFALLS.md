@@ -350,6 +350,17 @@
 - **验证**：`view.getDesignResolutionSize()` 为 1920×1080、scale 为 1280/1920、`Camera.orthoHeight` 为 540。
 - **关联**：`client/assets/scripts/app/BootController.ts`、`client/settings/v2/packages/project.json`。
 
+### P-116 Cocos 构建把 `[...new Set(x)]` 编译成 `[].concat(new Set(x))`
+
+- **日期**：2026-10-30
+- **发现者/会话**：B
+- **范围**：client / core
+- **现象**：宠物详情页报错 `配置表 "traits" 中不存在 id "[object Set]"`；`createPet` 返回的 `traits` 是 `[Set]` 而不是字符串数组（Node/tsx 下正常）。
+- **原因**：Cocos 构建的 loose spread 只按数组处理，`[...new Set(list)]` 被编译成 `[].concat(new Set(list))`，把 Set 本身塞进数组。core 的 `pet.ts`/`breeding.ts` 的 `dedupe` 命中该模式。
+- **规避**：`client/tools/sync-lib.mjs` 在生成 `assets/lib` 时把 `[...new Set(x)]` 等价改写为 `Array.from(new Set(x))`；源头建议 A 直接用 `Array.from`，避免所有构建目标踩坑。
+- **验证**：构建后 `assets/main/index.js` 中不再出现 `[].concat(new Set(`；详情页 traits 正常显示名称。
+- **关联**：`client/tools/sync-lib.mjs`、`packages/core/src/pet.ts`、`packages/core/src/breeding.ts`。
+
 ---
 
 ## 2.1 2026-10-28 评审补记
@@ -670,3 +681,4 @@
 | v1.5 | 2026-10-29 | 追加 P-047/P-048（D/C 第二批：patch 同 id 冲突、栖息地无移出入口） |
 | v1.6 | 2026-10-29 | 追加 P-113~P-115（B 客户端：手写场景 class id、spriteFrame 重置尺寸、设计分辨率与相机竞争） |
 | v1.7 | 2026-10-29 | 追加 P-049（sim 自带 AI 与 core autoCommand 漂移） |
+| v1.8 | 2026-10-30 | 追加 P-116（Cocos loose spread 把 `[...new Set]` 编译成 `[Set]`，客户端同步时改写） |

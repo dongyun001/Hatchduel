@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /**
  * 繁殖与近亲（DOMAIN_MODEL §8）。
  *
@@ -38,7 +39,7 @@ function capTraits(cfg: ConfigRepo, list: Id[], max: number): Id[] {
 }
 
 function dedupe(list: readonly Id[]): Id[] {
-  return [...new Set(list)];
+  return Array.from(new Set(list));
 }
 
 /** 双方及 `maxDepth` 代内祖先是否有交集（默认 3 代，DOMAIN §8.3）。 */

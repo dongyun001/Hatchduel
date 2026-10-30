@@ -1,0 +1,10 @@
+{
+  "startingResources": { "coin": 300, "food": 60, "geneDust": 0 },
+  "releaseRefund": {
+    "base": 5,
+    "perLevel": 2,
+    "perGeneSumDivisor": 10,
+    "rarityBonus": { "common": 1, "rare": 3, "epic": 8 }
+  },
+  "resourceCaps": { "coin": 999999, "food": 9999, "geneDust": 99999 }
+}

@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /** 战斗与派生属性（DOMAIN_MODEL §2.1、§4）。 */
 
 /** 八项属性。`hit` 只表示命中率修正，不是“效果命中”（PITFALLS P-003）。 */

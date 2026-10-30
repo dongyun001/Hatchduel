@@ -12,8 +12,16 @@ import type {
   ApiErrorCode,
   ApiResponse,
   AuthResponse,
+  CleanPetRequest,
+  CollectHabitatRequest,
+  CollectHabitatResponse,
+  FeedPetRequest,
+  MovePetToHabitatRequest,
+  PlayWithPetRequest,
+  ProfileWriteResponse,
   RevisionConflictDetails,
   RouteKey,
+  UpgradeHabitatRequest,
 } from '../../lib/protocol';
 import type { PlatformAdapter } from '../platform';
 
@@ -131,6 +139,31 @@ export class ApiClient {
     return response.data.profile;
   }
 
+  // —— 栖息地写操作（contract-v1.3 D-12 / ROUTES）——
+  collectHabitat(req: CollectHabitatRequest): Promise<ApiResponse<CollectHabitatResponse>> {
+    return this.call('collectHabitat', req);
+  }
+
+  feedPet(req: FeedPetRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('feedPet', req);
+  }
+
+  cleanPet(req: CleanPetRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('cleanPet', req);
+  }
+
+  playWithPet(req: PlayWithPetRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('playWithPet', req);
+  }
+
+  upgradeHabitat(req: UpgradeHabitatRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('upgradeHabitat', req);
+  }
+
+  movePetToHabitat(req: MovePetToHabitatRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('movePetToHabitat', req);
+  }
+
   async call<K extends RouteKey>(
     key: K,
     payload: ApiContract[K]['request'],
@@ -207,10 +240,13 @@ export class ApiClient {
     }
   }
 
-  /** 409：先用 details.latestProfile 重建，再拉一次全量档（契约 §4.1）。 */
+  /** 409：优先用 details.latestProfile 重建；details 缺失时才回退到 GET /profile。 */
   private recoverFromConflict(details: unknown): void {
     const conflict = details as RevisionConflictDetails | undefined;
-    if (conflict?.latestProfile) this.onProfile(conflict.latestProfile);
+    if (conflict?.latestProfile) {
+      this.onProfile(conflict.latestProfile);
+      return;
+    }
     void this.syncProfile();
   }
 

@@ -1,6 +1,7 @@
 // GENERATED FILE - DO NOT EDIT.
 // 由 client/tools/sync-lib.mjs 从 packages/{core,protocol}/src 同步并改写 import；
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
+// 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /** 好友与互访（Phase 2；端点先冻结，实现后置）。 */
 import type { EpochMs, HabitatInstance } from '../core';
 
