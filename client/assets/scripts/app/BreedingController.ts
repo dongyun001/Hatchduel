@@ -4,9 +4,13 @@ import { gotoScene } from './navigation';
 import type { AppState } from './store';
 import { getConfigRepo } from '../services/config';
 import { nowMs } from '../services/bootstrap';
-import { cloneProfile } from '../dev/clone';
-import { createMockRng } from '../dev/mockRng';
-import { breed, checkBreeding, isInbred } from '../../lib/core';
+import {
+  claimEggAction,
+  hatchRemainingMs,
+  startBreedingAction,
+  tickEggHatch,
+} from '../services/breedingActions';
+import { checkBreeding, isInbred } from '../../lib/core';
 import type { BreedCheck, BreedError, CoreStatKey, PetInstance, Profile, ResourceId } from '../../lib/core';
 import { COLORS, DESIGN, FONT_SIZE, SPRITE_SIZE } from '../ui/theme';
 import { makeButton, makeLabel, makePanel, makeSprite, paint, place } from '../ui/nodes';
@@ -52,10 +56,16 @@ function clampGene(value: number): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 /**
- * Breeding：双亲选择、基因区间预览、近亲警告、成本与校验。
- * 提交在当前阶段走本地 mock：checkBreeding 校验 + core `breed` 产蛋；
- * 等 C 的 /breeding/start 就绪后替换为 ApiClient（不重写公式）。
+ * Breeding：双亲选择、基因区间、近亲警告、成本、产蛋与孵蛋领取。
+ * 预览用 checkBreeding/isInbred；提交与领取走 breedingActions（服务端 /breeding/* 或离线 core）。
  */
 @ccclass('BreedingController')
 export class BreedingController extends Component {
@@ -68,12 +78,22 @@ export class BreedingController extends Component {
   start(): void {
     this.view = new SceneView(this, 'breeding-root', (root, frames, state) => this.renderScene(root, frames, state));
     void this.view.init();
+    this.schedule(this.onTick, 1);
   }
 
   onDestroy(): void {
+    this.unschedule(this.onTick);
     this.view?.dispose();
     this.view = null;
   }
+
+  private onTick = (): void => {
+    if (!this.view) return;
+    const profile = appStore.getState().profile;
+    const hasEgg = Boolean(profile && profile.breeding.eggs.length > 0);
+    tickEggHatch();
+    if (hasEgg) this.view.refresh();
+  };
 
   private renderScene(root: Node, frames: PlaceholderFrames, state: Readonly<AppState>): void {
     const title = createTitle(root, '繁殖');
@@ -103,7 +123,7 @@ export class BreedingController extends Component {
       const selected = pet.id === this.parentA || pet.id === this.parentB;
       const chip = makePanel(root, 220, 120);
       paint(chip, frames.white, selected ? SELECTED_TINT : COLORS.panel);
-      place(chip, x, 360);
+      place(chip, x, 380);
       chip.on(Node.EventType.TOUCH_END, () => this.pick(pet.id));
 
       const icon = makeSprite(
@@ -124,28 +144,36 @@ export class BreedingController extends Component {
       place(label.node, 40, 0);
     });
 
-    this.renderParentCard(root, frames, profile, a, -520, 40, '亲代 A');
-    this.renderParentCard(root, frames, profile, b, 520, 40, '亲代 B');
+    this.renderParentCard(root, frames, profile, a, -520, 70, '亲代 A');
+    this.renderParentCard(root, frames, profile, b, 520, 70, '亲代 B');
     this.renderPreview(root, frames, a, b, check, inbred);
+    this.renderEggs(root, frames, profile);
 
     const back = makeButton(root, '返回主页', 380, 84, frames.white, () => gotoScene('home'));
-    place(back, -420, -380);
+    place(back, -420, -400);
     const submit = makeButton(
       root,
-      '提交繁殖（离线）',
+      '提交繁殖',
       380,
       84,
       frames.white,
       () => void this.submit(a, b),
       check?.ok ? SELECTED_TINT : COLORS.panelAlt,
     );
-    place(submit, 0, -380);
+    place(submit, 0, -400);
     const toList = makeButton(root, '宠物列表', 380, 84, frames.white, () => gotoScene('petList'));
-    place(toList, 420, -380);
+    place(toList, 420, -400);
+
+    const mode =
+      state.remote.mode === 'mock'
+        ? '离线演示：startBreeding / claimBreeding 走 core'
+        : `服务端模式 · revision ${profile.revision}`;
+    const footer = makeLabel(root, mode, { fontSize: FONT_SIZE.small, color: COLORS.textDim });
+    place(footer.node, 0, -495);
 
     if (state.ui.toast) {
       const toast = makeLabel(root, state.ui.toast, { fontSize: FONT_SIZE.body, color: COLORS.accent, width: 1500, wrap: true });
-      place(toast.node, 0, -310);
+      place(toast.node, 0, -340);
     }
   }
 
@@ -194,12 +222,12 @@ export class BreedingController extends Component {
     y: number,
     title: string,
   ): void {
-    const card = makePanel(root, 360, 420);
+    const card = makePanel(root, 380, 420);
     paint(card, frames.white, COLORS.panel);
     place(card, x, y);
 
     const titleLabel = makeLabel(card, title, { fontSize: FONT_SIZE.body, color: COLORS.accent });
-    place(titleLabel.node, 0, 180);
+    place(titleLabel.node, 0, 190);
 
     if (!pet) {
       const empty = makeLabel(card, '点击上方宠物选择', { fontSize: FONT_SIZE.small, color: COLORS.textDim });
@@ -210,40 +238,40 @@ export class BreedingController extends Component {
     const icon = makeSprite(
       card,
       this.iconFrame(pet, frames),
-      SPRITE_SIZE.pet * DESIGN.pixelScale,
-      SPRITE_SIZE.pet * DESIGN.pixelScale,
+      SPRITE_SIZE.petSmall * DESIGN.pixelScale,
+      SPRITE_SIZE.petSmall * DESIGN.pixelScale,
       elementTint(pet.elementId),
     );
-    place(icon.node, 0, 50);
+    place(icon.node, 0, 55);
 
     const name = makeLabel(card, `${speciesName(pet.speciesId)} ${genderMark(pet.gender)}`, {
       fontSize: FONT_SIZE.heading,
       color: COLORS.text,
     });
-    place(name.node, 0, -85);
+    place(name.node, 0, -70);
 
     const meta = makeLabel(card, `${stageName(pet.stage)} · Lv.${pet.level} · 世代 ${pet.generation}`, {
       fontSize: FONT_SIZE.small,
       color: COLORS.textDim,
     });
-    place(meta.node, 0, -120);
+    place(meta.node, 0, -112);
 
-    const genes = `生命 ${pet.genome.stats.hp}  攻击 ${pet.genome.stats.atk}\n防御 ${pet.genome.stats.def}  速度 ${pet.genome.stats.spd}`;
+    const genes = `生命 ${pet.genome.stats.hp}  攻击 ${pet.genome.stats.atk}  防御 ${pet.genome.stats.def}  速度 ${pet.genome.stats.spd}`;
     const geneLabel = makeLabel(card, genes, {
-      fontSize: FONT_SIZE.small,
+      fontSize: 17,
       color: COLORS.textDim,
-      width: 320,
-      height: 50,
+      width: 350,
+      height: 24,
       wrap: true,
     });
-    place(geneLabel.node, 0, -155);
+    place(geneLabel.node, 0, -145);
 
     const status = cooldownText(pet, profile, nowMs());
     const statusLabel = makeLabel(card, status, {
       fontSize: FONT_SIZE.small,
       color: status === '可繁殖' ? COLORS.good : COLORS.danger,
     });
-    place(statusLabel.node, 0, -195);
+    place(statusLabel.node, 0, -188);
   }
 
   private renderPreview(
@@ -257,7 +285,7 @@ export class BreedingController extends Component {
     const cfg = getConfigRepo();
     const panel = makePanel(root, 560, 420);
     paint(panel, frames.white, COLORS.panel);
-    place(panel, 0, 40);
+    place(panel, 0, 70);
 
     const title = makeLabel(panel, '子代预览', { fontSize: FONT_SIZE.heading, color: COLORS.text });
     place(title.node, 0, 180);
@@ -277,9 +305,9 @@ export class BreedingController extends Component {
     const speciesText = `物种：${speciesName(a.speciesId)} / ${speciesName(b.speciesId)}（各 50%）`;
     const elementText = `属性：${elementName(a.elementId)} / ${elementName(b.elementId)}（各 50%，1% 突变）`;
     const speciesLabel = makeLabel(panel, speciesText, { fontSize: FONT_SIZE.small, color: COLORS.textDim, width: 500, wrap: true });
-    place(speciesLabel.node, 0, 135);
+    place(speciesLabel.node, 0, 130);
     const elementLabel = makeLabel(panel, elementText, { fontSize: FONT_SIZE.small, color: COLORS.textDim, width: 500, wrap: true });
-    place(elementLabel.node, 0, 105);
+    place(elementLabel.node, 0, 100);
 
     const penalty = inbred ? breeding.inbreeding.genePenalty : 0;
     GENE_KEYS.forEach((key, index) => {
@@ -288,7 +316,7 @@ export class BreedingController extends Component {
       const high = clampGene(mean + breeding.mutation.geneSigma);
       const text = `${GENE_NAMES[key]}  ${low} ~ ${high}（均值 ${clampGene(mean)}）`;
       const label = makeLabel(panel, text, { fontSize: FONT_SIZE.body, color: COLORS.text, width: 500, wrap: true });
-      place(label.node, 0, 68 - index * 34);
+      place(label.node, 0, 62 - index * 32);
     });
 
     if (inbred) {
@@ -298,7 +326,7 @@ export class BreedingController extends Component {
         width: 500,
         wrap: true,
       });
-      place(warning.node, 0, -82);
+      place(warning.node, 0, -85);
     }
 
     const status = check?.ok
@@ -310,13 +338,79 @@ export class BreedingController extends Component {
       width: 500,
       wrap: true,
     });
-    place(statusLabel.node, 0, -118);
+    place(statusLabel.node, 0, -125);
 
     const costText = `成本：${breeding.cost
       .map((item) => `${RESOURCE_NAMES[item.resource]} ${item.amount}`)
       .join(' · ')}`;
     const costLabel = makeLabel(panel, costText, { fontSize: FONT_SIZE.small, color: COLORS.textDim, width: 500, wrap: true });
-    place(costLabel.node, 0, -158);
+    place(costLabel.node, 0, -168);
+  }
+
+  private renderEggs(root: Node, frames: PlaceholderFrames, profile: Profile): void {
+    const panel = makePanel(root, 1600, 170);
+    paint(panel, frames.white, COLORS.panel);
+    place(panel, 0, -230);
+
+    const eggs = profile.breeding.eggs
+      .map((id) => profile.pets[id])
+      .filter((pet): pet is PetInstance => Boolean(pet));
+    const title = makeLabel(panel, `蛋（${eggs.length}）· 孵化后点击蛋领取`, {
+      fontSize: FONT_SIZE.small,
+      color: COLORS.textDim,
+    });
+    place(title.node, 0, 60);
+
+    if (eggs.length === 0) {
+      const empty = makeLabel(panel, '还没有蛋；选择双亲后提交繁殖', {
+        fontSize: FONT_SIZE.small,
+        color: COLORS.textDim,
+      });
+      place(empty.node, 0, -20);
+      return;
+    }
+
+    eggs.slice(0, 4).forEach((egg, index) => {
+      const x = (index - (Math.min(eggs.length, 4) - 1) / 2) * 390;
+      const card = makePanel(panel, 360, 120);
+      paint(card, frames.white, '#2b4252');
+      place(card, x, -25);
+      card.on(Node.EventType.TOUCH_END, () => void this.onClaimEgg(egg.id));
+
+      const icon = makeSprite(
+        card,
+        frames.egg,
+        SPRITE_SIZE.icon48 * DESIGN.pixelScale,
+        SPRITE_SIZE.icon48 * DESIGN.pixelScale,
+        elementTint(egg.elementId),
+      );
+      place(icon.node, -110, 0);
+
+      const remaining = hatchRemainingMs(egg);
+      const ready = egg.stage !== 'egg' || remaining <= 0;
+      const stateText = ready ? '可领取' : `孵化中 ${formatCountdown(remaining)}`;
+      const name = makeLabel(card, speciesName(egg.speciesId), {
+        fontSize: FONT_SIZE.body,
+        color: COLORS.text,
+        align: 'left',
+        width: 140,
+      });
+      place(name.node, 60, 22);
+      const stateLabel = makeLabel(card, stateText, {
+        fontSize: FONT_SIZE.small,
+        color: ready ? COLORS.good : COLORS.accent,
+        align: 'left',
+        width: 140,
+      });
+      place(stateLabel.node, 60, -14);
+      const sub = makeLabel(card, `${stageName(egg.stage)} · 世代 ${egg.generation}`, {
+        fontSize: 13,
+        color: COLORS.textDim,
+        align: 'left',
+        width: 140,
+      });
+      place(sub.node, 60, -44);
+    });
   }
 
   private async submit(a: PetInstance | undefined, b: PetInstance | undefined): Promise<void> {
@@ -336,30 +430,24 @@ export class BreedingController extends Component {
 
     this.submitting = true;
     try {
-      const result = breed(a, b, now, cfg, createMockRng());
-      const next = cloneProfile(profile);
-      for (const cost of cfg.breeding().cost) {
-        next.currencies[cost.resource] = (next.currencies[cost.resource] ?? 0) - cost.amount;
-      }
-      next.pets[result.child.id] = result.child;
-      next.breeding.eggs.push(result.child.id);
-      next.breeding.cooldowns[a.id] = result.parentCooldowns[0];
-      next.breeding.cooldowns[b.id] = result.parentCooldowns[1];
-      const parentA = next.pets[a.id];
-      if (parentA) parentA.fertility.cooldownUntil = result.parentCooldowns[0];
-      const parentB = next.pets[b.id];
-      if (parentB) parentB.fertility.cooldownUntil = result.parentCooldowns[1];
-      next.stats.breeds += 1;
-      appStore.setProfile(next);
-      appStore.setSelectedPet(result.child.id);
-      this.view?.showToast(
-        `产下 ${speciesName(result.child.speciesId)} 蛋${result.inbred ? '（近亲）' : ''}（离线演示）`,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.view?.showToast(`繁殖失败：${message}`);
+      const result = await startBreedingAction(a.id, b.id);
+      this.view?.showToast(`${result.message}${result.inbred ? '（近亲）' : ''}`);
     } finally {
       this.submitting = false;
     }
+  }
+
+  private async onClaimEgg(eggId: string): Promise<void> {
+    const profile = appStore.getState().profile;
+    const egg = profile?.pets[eggId];
+    if (!egg) return;
+    const remaining = hatchRemainingMs(egg);
+    if (egg.stage === 'egg' && remaining > 0) {
+      this.view?.showToast(`还没孵化：还剩 ${formatCountdown(remaining)}`);
+      return;
+    }
+    const result = await claimEggAction(eggId);
+    const suffix = result.pet ? `：${speciesName(result.pet.speciesId)}` : '';
+    this.view?.showToast(`${result.message}${suffix}`);
   }
 }

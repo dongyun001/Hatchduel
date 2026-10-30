@@ -9,6 +9,8 @@ export const DESIGN = {
 /** 宠物战斗精灵基础尺寸（虚拟像素），显示时 × pixelScale。 */
 export const SPRITE_SIZE = {
   pet: 96,
+  /** 小型宠物（ART_SPEC §4.1），用于亲代卡片等空间有限的位置。 */
+  petSmall: 64,
   icon32: 32,
   icon48: 48,
 } as const;

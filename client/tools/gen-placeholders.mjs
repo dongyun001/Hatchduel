@@ -73,7 +73,7 @@ function hexToRgb(hex) {
 }
 
 /** 色块 + 1px 描边 + 中心菱形标记（避免纯色块之间难以区分）。 */
-function makeBlock(width, height, hex, mark) {
+function makeBlock(width, height, hex, mark, border = true) {
   const [r, g, b] = hexToRgb(hex);
   const rgba = Buffer.alloc(width * height * 4);
   const cx = (width - 1) / 2;
@@ -82,7 +82,7 @@ function makeBlock(width, height, hex, mark) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const i = (y * width + x) * 4;
-      const isBorder = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+      const isBorder = border && (x === 0 || y === 0 || x === width - 1 || y === height - 1);
       const inMark = mark && Math.abs(x - cx) + Math.abs(y - cy) <= radius;
       if (isBorder) {
         rgba[i] = BORDER[0];
@@ -106,7 +106,7 @@ function makeBlock(width, height, hex, mark) {
 }
 
 const FILES = [
-  { name: 'white', width: 8, height: 8, hex: '#ffffff', mark: false },
+  { name: 'white', width: 8, height: 8, hex: '#ffffff', mark: false, border: false },
   { name: 'pet_turtle_water_idle', width: 96, height: 96, hex: '#3f8fd2', mark: true },
   { name: 'pet_fish_thunder_idle', width: 96, height: 96, hex: '#e8c547', mark: true },
   { name: 'pet_frog_grass_idle', width: 96, height: 96, hex: '#5aa84f', mark: true },
@@ -120,7 +120,7 @@ const FILES = [
 
 mkdirSync(outDir, { recursive: true });
 for (const file of FILES) {
-  const png = makeBlock(file.width, file.height, file.hex, file.mark);
+  const png = makeBlock(file.width, file.height, file.hex, file.mark, file.border !== false);
   writeFileSync(join(outDir, `${file.name}.png`), png);
   console.log(`[placeholder] ${file.name}.png ${file.width}x${file.height}`);
 }

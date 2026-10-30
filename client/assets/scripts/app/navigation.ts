@@ -1,6 +1,6 @@
 import { director } from 'cc';
 
-/** 场景名与 settings 中注册的场景一致（Boot / Home / Habitat / PetList / PetDetail / Breeding）。 */
+/** 场景名与 settings 中注册的场景一致（Boot / Home / Habitat / PetList / PetDetail / Breeding / StageSelect / Battle）。 */
 export const SCENES = {
   boot: 'Boot',
   home: 'Home',
@@ -8,6 +8,8 @@ export const SCENES = {
   petList: 'PetList',
   petDetail: 'PetDetail',
   breeding: 'Breeding',
+  stageSelect: 'StageSelect',
+  battle: 'Battle',
 } as const;
 
 export type SceneKey = keyof typeof SCENES;

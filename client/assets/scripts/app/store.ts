@@ -1,11 +1,11 @@
-import type { Profile } from '../../lib/core';
+import type { BattleSetup, Profile } from '../../lib/core';
 import type { PlatformKind } from '../platform';
 
 /**
  * 单向数据流：UI 只读 `appStore.getState()`，动作通过 service 改 store。
  * 不引入状态机；服务端返回 `ProfilePatch` 时由 service 合并后整体写回。
  */
-export type ScreenId = 'boot' | 'home' | 'habitat' | 'petList' | 'petDetail' | 'breeding';
+export type ScreenId = 'boot' | 'home' | 'habitat' | 'petList' | 'petDetail' | 'breeding' | 'stageSelect' | 'battle';
 
 /** 宠物列表筛选（阶段维度）。 */
 export type PetFilter = 'all' | 'adult' | 'juvenile' | 'egg';
@@ -28,11 +28,25 @@ export interface UiState {
   petFilter: PetFilter;
 }
 
+/** 当前 PvE 会话：setup 来自服务端或本地 buildPveBattleSetup；Battle 场景消费。 */
+export interface BattleSessionState {
+  mode: 'mock' | 'server';
+  /** mock 模式没有服务端 battleId。 */
+  battleId: string | null;
+  stageId: string;
+  setup: BattleSetup;
+  /** 服务端会话过期时间；mock 为 null。 */
+  expiresAt: number | null;
+  /** 开战时的队伍快照（用于结算经验）。 */
+  partyPetIds: string[];
+}
+
 export interface AppState {
   platformKind: PlatformKind | null;
   profile: Profile | null;
   remote: RemoteState;
   ui: UiState;
+  battle: BattleSessionState | null;
 }
 
 const initialState: AppState = {
@@ -51,6 +65,7 @@ const initialState: AppState = {
     selectedPetId: null,
     petFilter: 'all',
   },
+  battle: null,
 };
 
 type Listener = (state: Readonly<AppState>) => void;
@@ -102,6 +117,10 @@ class Store {
 
   setRemote(remote: Partial<RemoteState>): void {
     this.update((prev) => ({ ...prev, remote: { ...prev.remote, ...remote } }));
+  }
+
+  setBattle(battle: BattleSessionState | null): void {
+    this.update((prev) => ({ ...prev, battle }));
   }
 
   reset(): void {
