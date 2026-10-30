@@ -11,11 +11,19 @@
 import {
   CoreNotImplementedError,
   advanceProfile as coreAdvanceProfile,
+  cleanPet as coreCleanPet,
+  collectHabitat as coreCollectHabitat,
+  feedPet as coreFeedPet,
+  movePetToHabitat as coreMovePetToHabitat,
+  playWithPet as corePlayWithPet,
   releasePet as coreReleasePet,
+  upgradeHabitat as coreUpgradeHabitat,
 } from '@petbattle/core';
 import type {
   ConfigRepo,
   EpochMs,
+  HabitatId,
+  Id,
   PetId,
   Profile,
   ProfilePatch,
@@ -33,10 +41,30 @@ export interface AdvanceResult {
   degraded: boolean;
 }
 
+/** 栖息地操作统一返回；`patch` 的 revision 由服务端写操作覆写（DOMAIN §15.7）。 */
+export interface HabitatOpResult {
+  profile: Profile;
+  patch: ProfilePatch;
+}
+
 export interface CoreAdapter {
   advanceProfile(profile: Profile, now: EpochMs): AdvanceResult;
   /** 放生：拒绝原因由 core 抛 `ReleaseError`，服务端按 reason 映射错误码。 */
   releasePet(profile: Profile, petId: PetId, now: EpochMs): ReleaseResult;
+
+  // 栖息地操作（contract-v1.3 D-12）：失败抛 `name='HabitatError'` 的 Error，按 code 映射。
+  movePetToHabitat(
+    profile: Profile,
+    petId: PetId,
+    habitatId: HabitatId | null,
+    now: EpochMs,
+  ): HabitatOpResult;
+  feedPet(profile: Profile, petId: PetId, foodId: Id, now: EpochMs): HabitatOpResult;
+  cleanPet(profile: Profile, petId: PetId, now: EpochMs): HabitatOpResult;
+  playWithPet(profile: Profile, petId: PetId, now: EpochMs): HabitatOpResult;
+  upgradeHabitat(profile: Profile, habitatId: HabitatId, now: EpochMs): HabitatOpResult;
+  collectHabitat(profile: Profile, habitatId: HabitatId, now: EpochMs): HabitatOpResult;
+
   /** 是否曾经降级过；用于日志告警与运维排查。 */
   readonly degraded: boolean;
 }
@@ -95,6 +123,30 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
 
     releasePet(profile, petId, now) {
       return coreReleasePet(profile, petId, now, requireRepo());
+    },
+
+    movePetToHabitat(profile, petId, habitatId, now) {
+      return coreMovePetToHabitat(profile, petId, habitatId, now, requireRepo());
+    },
+
+    feedPet(profile, petId, foodId, now) {
+      return coreFeedPet(profile, petId, foodId, now, requireRepo());
+    },
+
+    cleanPet(profile, petId, now) {
+      return coreCleanPet(profile, petId, now, requireRepo());
+    },
+
+    playWithPet(profile, petId, now) {
+      return corePlayWithPet(profile, petId, now, requireRepo());
+    },
+
+    upgradeHabitat(profile, habitatId, now) {
+      return coreUpgradeHabitat(profile, habitatId, now, requireRepo());
+    },
+
+    collectHabitat(profile, habitatId, now) {
+      return coreCollectHabitat(profile, habitatId, now, requireRepo());
     },
 
     get degraded() {

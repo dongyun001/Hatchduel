@@ -47,6 +47,41 @@ const RELEASE_ERROR_MAP: Record<ReleaseErrorReason, { status: number; code: ApiE
   last_adult: { status: 409, code: 'LAST_ADULT' },
 };
 
+/**
+ * 栖息地操作失败码（DOMAIN §15.7，contract-v1.3 D-12）。
+ *
+ * core 抛的是普通 `Error`（`name = 'HabitatError'` + `code`），没有导出 class，
+ * 这里按结构化特征识别；`code` 集合与 core 的 `HabitatErrorCode` 对齐。
+ */
+type HabitatErrorCode =
+  | 'pet_not_found'
+  | 'egg_not_allowed'
+  | 'habitat_not_found'
+  | 'food_not_found'
+  | 'capacity_full'
+  | 'insufficient_resources'
+  | 'max_level'
+  | 'slot_conflict';
+
+const HABITAT_ERROR_MAP: Record<HabitatErrorCode, { status: number; code: ApiErrorCode }> = {
+  pet_not_found: { status: 404, code: 'PET_NOT_FOUND' },
+  habitat_not_found: { status: 404, code: 'NOT_FOUND' },
+  food_not_found: { status: 404, code: 'NOT_FOUND' },
+  capacity_full: { status: 409, code: 'CAPACITY_FULL' },
+  insufficient_resources: { status: 409, code: 'INSUFFICIENT_RESOURCES' },
+  egg_not_allowed: { status: 400, code: 'VALIDATION_FAILED' },
+  max_level: { status: 400, code: 'VALIDATION_FAILED' },
+  slot_conflict: { status: 400, code: 'VALIDATION_FAILED' },
+};
+
+function readHabitatErrorCode(error: unknown): HabitatErrorCode | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const candidate = error as { name?: unknown; code?: unknown };
+  if (candidate.name !== 'HabitatError') return undefined;
+  if (typeof candidate.code !== 'string') return undefined;
+  return candidate.code in HABITAT_ERROR_MAP ? (candidate.code as HabitatErrorCode) : undefined;
+}
+
 export interface AppErrorOptions {
   status?: number;
   details?: unknown;
@@ -90,6 +125,13 @@ export function mapError(error: unknown): MappedError {
   if (error instanceof ReleaseError) {
     const mapped = RELEASE_ERROR_MAP[error.reason];
     return { status: mapped.status, code: mapped.code, message: error.message };
+  }
+
+  const habitatCode = readHabitatErrorCode(error);
+  if (habitatCode !== undefined) {
+    const mapped = HABITAT_ERROR_MAP[habitatCode];
+    const message = error instanceof Error ? error.message : habitatCode;
+    return { status: mapped.status, code: mapped.code, message };
   }
 
   if (error instanceof ConfigValidationError) {

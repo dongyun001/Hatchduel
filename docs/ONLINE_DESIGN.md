@@ -496,11 +496,14 @@ interface ApiResponse<T> {
 - CAS 失败（并发/多实例）→ 重新读最新档，返回 409 + `RevisionConflictDetails`。
 - `ProfilePatch` 由 `core` 的推进增量与端点增量合并（`server/src/domain/patch.ts`），`revision` 与 `at/lastEvaluatedAt` 由服务端覆写。
 - **patch 字段一律是"写入后的值"**，不是增量：`currencies` 下发完整四键、`lineup` 下发完整数组、`pets.upsert` 是整只宠物、`pets.remove` 是要删的 id。放生的返还金额同时出现在 `ReleasePetResponse.refund`（便于客户端做飘字），`currencies` 仍是绝对值。
-- 审计写入失败不回滚业务写入，但记 `error` 日志。
+- **栖息地操作的 patch**：core 的六个函数返回的 `patch.fromRevision = toRevision = 输入 revision`，由服务端在 `composePatch` 时统一覆写成「输入 revision → 输入+1」；同一只宠物不会同时出现在 upsert 与 remove（remove 优先）。
+- 审计写入失败不回滚业务写入，但记 `error` 日志。已接入的审计动作：`account.create`、`profile.rename`、`pet.rename`、`pet.lock|unlock`、`pet.release`、`lineup.set`、`habitat.move|collect|feed|clean|play|upgrade`。
 
 ### 16.4 core 桥接、初始档与降级
 
-- 服务端只通过 `CoreAdapter` 调领域函数（`advanceProfile` / `releasePet`）；业务端点不得自行改资源、宠物属性或阶段。
+- 服务端只通过 `CoreAdapter` 调领域函数（`advanceProfile` / `releasePet` / 六个栖息地操作）；业务端点不得自行改资源、宠物属性或阶段。
+- 栖息地失败码来自 core 的 `Error`（`name = 'HabitatError'` + `code`，core 未导出 class，服务端按结构化特征识别），映射见 `server/src/errors.ts`：`pet_not_found → PET_NOT_FOUND(404)`、`habitat_not_found|food_not_found → NOT_FOUND(404)`、`capacity_full → CAPACITY_FULL(409)`、`insufficient_resources → INSUFFICIENT_RESOURCES(409)`、`egg_not_allowed|max_level|slot_conflict → VALIDATION_FAILED(400)`。
+- `collectHabitat` 只返回 `{ profile, patch }`（CONTRACT D-12），因此 `collected` 由服务端在调用前按同一口径快照：`stored` 的整数部分入账、小数零头留在 `stored`。若 core 以后直接返回 `collected`，服务端改成透传即可。
 - **初始档（`domain/starter-profile.ts`）**：调 `createPet` 建 3 只（水龟/雷鱼/草蛙，四项基因 50，generation 1，parents `[null,null]`，性别 male/female/male），出生时间取 `now - hatchMs - juvenileMs`，再对整档调 `advanceProfile(profile, now, cfg)`，断言全部 `adult` 且 `fertility.readyAt <= now`；栖息地 `meadow` 1 级、3 只占位 + 1 空；资源取 `economy.startingResources`；图鉴写 3 个组合、`bestGene = 50`；最终 `revision = 0`、`createdAt = lastEvaluatedAt = now`（首次登录不结算离线产出）。服务端不手写阶段阈值/衰减/产出。
 - 降级只保留给"配置仓库缺失"这一种本地开发场景：`PETBATTLE_CORE_STUB=strict`（**compose 默认**）时启动即拒绝，或缺配置直接 501；`memory` 本地模式可显式放宽。core 已无契约桩，正常启动日志不应出现"降级"。
 - 需要配置的操作（放生、建宠）没有降级余地：配置缺失返回 `CONFIG_INVALID`。
@@ -523,23 +526,28 @@ interface ApiResponse<T> {
 | `POST /profile/rename` | 改账号 `displayName`，revision +1 并返回 patch |
 | `POST /pets/:id/rename` | 宠物改名（1~12 字符，去除首尾空白；归属校验）；revision +1 |
 | `POST /pets/:id/lock` | 设置 `locked`（布尔）；只改标记位，放生时的拒绝由 core 判定 |
-| `POST /pets/:id/release` | 调 `core.releasePet`：五类拒绝映射为 `EGG_NOT_RELEASABLE` / `PET_LOCKED` / `PET_IN_USE` / `LAST_ADULT` / `PET_NOT_FOUND`；返还基因尘写回 `currencies`，图鉴 `owned` 不回退，同时清掉防守阵容里的悬空 id，写 `pet.release` 审计 |
+| `POST /pets/:id/release` | 调 `core.releasePet`：拒绝映射为 `EGG_NOT_RELEASABLE` / `PET_LOCKED` / `PET_IN_USE`（在编队/栖息地/防守阵容）/ `LAST_ADULT` / `PET_NOT_FOUND`；返还基因尘写回 `currencies`，图鉴 `owned` 不回退，写 `pet.release` 审计。**初始 3 只都在栖息地，必须先 `/habitat/move` 移出才能放生** |
 | `POST /lineup/set` | 出战编队：≤3、属于本人、引用存在、非蛋、不重复；幼年可上阵；与 `pvp/defense` 互不联动 |
+| `POST /habitat/move` | `{ petId, habitatId \| null }`：放入/移出；容量、归属、非蛋、槽位唯一由 `core.movePetToHabitat` 校验；移出是放生的前置步骤 |
+| `POST /habitat/collect` | `{ habitatId }`：`stored` 整数部分转入 `currencies`，零头留存；响应 `collected` 为本次入账快照 |
+| `POST /habitat/feed` | `{ petId, foodId }`：扣 `FoodConfig.cost`，恢复 hunger/mood；缺食物/资源返回 `INSUFFICIENT_RESOURCES` |
+| `POST /habitat/clean` | `{ petId }`：恢复 hygiene（缺省 +20，可由栖息地 `careRecoveryPerAction` 覆盖），不消耗资源 |
+| `POST /habitat/play` | `{ petId }`：恢复 mood（缺省 +20），不消耗资源 |
+| `POST /habitat/upgrade` | `{ habitatId }`：扣下一级成本、扩容量；资源不足 `INSUFFICIENT_RESOURCES`，到上限 `VALIDATION_FAILED` |
 
 - 所有写端点都要求 `Idempotency-Key` + `X-Base-Revision`，并走同一流水线与审计。
 
-### 16.7 尚未实现（等 core 公共函数）
+### 16.7 尚未实现
 
-| 端点 | 缺的 core API | 说明 |
+| 端点 | 缺什么 | 说明 |
 |---|---|---|
-| `/habitat/collect` | 无独立函数，需要"领取 stored → currencies"的领域出口 | 现有 `advanceProfile` 只累积 `habitat.stored`；领取属于经济变更，应由 core 提供（或明确允许服务端做纯搬运） |
-| `/habitat/feed` `/habitat/clean` `/habitat/play` | 无 `feed/clean/play` 函数 | 食物消耗与状态恢复规则在 DOMAIN §5.3，需要 A 补 |
-| `/habitat/upgrade` | 无 `upgradeHabitat` 函数 | 成本/容量/产出系数在配置里，但扣费与等级推进应有领域函数 |
-| `/breeding/start` `/breeding/claim` | `checkBreeding`/`breed` 已可用；缺"蛋的孵化领取"出口（`breed` 返回 child，孵化推进靠 `advanceProfile`） | 冷却落库需要 `parentCooldowns`（v1.2 已提供），可接线 |
-| `/battle/pve/start` `/battle/pve/claim` | `buildBattleSetup`/`buildEnemyTeam`/`BattleEngine` 已可用 | 需要确定战斗会话存储与奖励发放口径（CONTRACT §10.2） |
-| `/pvp/defense` `/pvp/opponent` `/pvp/fight` `/pvp/replay/:id` | `buildBattleSetup` 已可用；匹配与战报存储未定义 | 需先定匹配/快照/回放模型 |
+| `/breeding/start` `/breeding/claim` | `checkBreeding`/`breed` 已可用（含 `parentCooldowns`）；缺「开始繁殖」与「领取蛋」的落库出口口径 | `breed` 直接返回 `child`，但开始时扣费/写冷却、领取时把蛋转入 `pets` 需要 0 号定口径（CONTRACT §9.3 已预裁定 applyProfilePatch/startBreeding，待落地） |
+| `/battle/pve/start` `/battle/pve/claim` | `buildPveBattleSetup`/`buildBattleSetup`/`BattleEngine`/`applyExp` 已可用 | 需要战斗会话存储与奖励发放口径（CONTRACT §10.2） |
+| `/pvp/defense` `/pvp/opponent` `/pvp/fight` `/pvp/replay/:id` | `buildBattleSetup` 已可用；匹配与战报存储未定义 | 需先定匹配/快照/回放模型；`battle_sessions` 表已留位 |
 | `/leaderboard` `/friends` `/friends/:id/visit` | — | 指标口径（CONTRACT §10.3）与好友规则未定 |
 | `/account/bind` `/account/unbind` `/auth/wechat` `/auth/steam` | — | 需要平台密钥与外部网络校验 |
 | 限流与异常检测 | — | 按账号/IP，Redis 后置 |
+
+**产品待确认（按现状实现）**：`feed/clean/play` 目前允许操作不在栖息地的宠物（core 对不在栖息地的情况使用默认恢复量 20/20），服务端不额外加限制；是否收紧为「仅栖息地内互动」等 PRD 口径确认后再改。
 
 - `battle_sessions` 表与 `BattleSessionStore` 接口已留位，用于 PvP 快照/重放（PITFALLS P-027）。
