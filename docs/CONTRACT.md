@@ -497,6 +497,36 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 注意事项 | `collectHabitat` 只返回 `{profile, patch}`；`collected` 由 C 在调用前快照 `habitat.stored` 计算 |
 | 未决 | `feed/clean/play` 目前不要求宠物在栖息地（不在时用默认恢复量），是否限制为“栖息地内互动”待产品确认 |
 
+### 11.6 A 第四批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 分支 369；合并后全仓 393；core 行覆盖率 98.8% |
+| applyProfilePatch | remove 优先、currencies 覆盖、codex 不回退；纯函数 |
+| startBreeding | 校验/扣费/产蛋/父母冷却/统计；`BreedingError(reason)`；返回 `{profile, patch, child, inbred, parentCooldowns}` |
+| 技能冷却 | `BattleUnit.cooldowns?`；回合递减、cast 设置、availableCommands 过滤；无字段时行为不变 |
+| 兼容性 | 新增导出 + 可选字段；无签名破坏 |
+
+### 11.7 C 第三批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 端点 | `/habitat/move|collect|feed|clean|play|upgrade` 全部接线 |
+| 放生闭环 | 初始档 → move 移出 → release 成功；返还基因尘 27；codex owned 不回退 |
+| 错误映射 | HabitatError → NOT_FOUND/CAPACITY_FULL/INSUFFICIENT_RESOURCES/VALIDATION_FAILED |
+| 冒烟 | 内存：move 200、release 200、feed/clean/play 200、collect 200、upgrade 409（资源不足）、move-back 200；日志无降级 |
+| 测试 | 全仓 393 |
+
+### 11.8 B 第二批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 场景 | PetList / PetDetail / Breeding |
+| 建体 | mockProfile 改用 `createPet` + advanceProfile，不再字面构造 |
+| 写操作 | Habitat 动作接入 ApiClient（mock 开关保留）；409 重建与 serverTime 偏移验证 |
+| 同步 | `assets/lib` + `assets/resources/config` 由 sync-lib 生成，CI 检查 |
+| 构建 | 客户端 typecheck、WeChat 空包、P-116 记录 |
+
 ## 12. 变更记录
 
 | 版本 | 日期 | 说明 |
