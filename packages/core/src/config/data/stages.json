@@ -147,14 +147,14 @@
         "speciesId": "snake",
         "elementId": "earth",
         "level": 8,
-        "geneQuality": 51,
+        "geneQuality": 50,
         "traits": []
       },
       {
         "speciesId": "fish",
         "elementId": "water",
         "level": 8,
-        "geneQuality": 53,
+        "geneQuality": 52,
         "traits": [
           "trait_swift"
         ]
@@ -163,7 +163,7 @@
         "speciesId": "frog",
         "elementId": "grass",
         "level": 8,
-        "geneQuality": 53,
+        "geneQuality": 52,
         "traits": []
       }
     ],

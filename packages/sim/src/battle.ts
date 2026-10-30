@@ -137,7 +137,7 @@ function pickCommand(
     .filter((cost) => cost >= ULTIMATE_SKILL_MIN);
   const cheapestUltimate = ultimateCosts.length > 0 ? Math.min(...ultimateCosts) : Number.POSITIVE_INFINITY;
 
-  if (energy + 30 >= cheapestUltimate) {
+  if (energy >= cheapestUltimate - 20) {
     const normal = skills.find((command) => cfg.skill(command.skillId).kind === 'normal');
     if (normal) return input(normal);
   }

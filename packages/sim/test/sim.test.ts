@@ -57,6 +57,30 @@ describe('配置静态分析', () => {
     }
   });
 
+  it('首通蛋模板与孵化节奏检查通过', () => {
+    const timing = analysis.checks.find((check) => check.id === 'rewards.egg.timing');
+    expect(timing?.level).toBe('pass');
+    expect(timing?.detail).toContain('2.5h');
+    expect(analysis.notes.some((note) => note.includes('stage_2: cat/fire'))).toBe(true);
+    expect(analysis.notes.some((note) => note.includes('stage_4: snake/earth'))).toBe(true);
+  });
+
+  it('重复奖励发宠物会被判 fail', () => {
+    const bad = JSON.parse(JSON.stringify(config)) as typeof config;
+    const firstStage = bad.stages[0];
+    expect(firstStage).toBeDefined();
+    if (!firstStage) return;
+    firstStage.rewards.repeat = {
+      ...firstStage.rewards.repeat,
+      pets: [{ speciesId: 'cat', elementId: 'fire' }],
+    };
+    const badAnalysis = analyzeConfig(bad);
+    const failure = badAnalysis.checks.find(
+      (check) => check.id === 'rewards.repeat.pets.stage_1' && check.level === 'fail',
+    );
+    expect(failure).toBeDefined();
+  });
+
   it('图鉴组合为 25，经济无负净产出', () => {
     expect(analysis.counts.codexCombos).toBe(25);
     expect(analysis.economy.foodNetPerHourAtCapacity).toBeGreaterThan(0);
