@@ -6,6 +6,7 @@ import { runBattleBatch } from '../src/battle.js';
 import { runBreedingBatch } from '../src/breeding.js';
 import { loadConfig } from '../src/config.js';
 import { runEconomyCurve } from '../src/economy.js';
+import { runPlayerPathCurve } from '../src/economy-path.js';
 import { parseArgs } from '../src/main.js';
 import { SIM_BEGIN, SIM_END, applySimSection } from '../src/report.js';
 import { mulberry32, createRng } from '../src/rng.js';
@@ -67,7 +68,7 @@ describe('CLI 参数', () => {
   it('默认值与覆盖', () => {
     const defaults = parseArgs([]);
     expect(defaults.battles).toBe(1000);
-    expect(defaults.breed).toBe(1000);
+    expect(defaults.breed).toBe(5000);
     expect(defaults.days).toBe(7);
 
     const options = parseArgs(['--battles=50', '--stage=stage_2', '--write', '--no-battle']);
@@ -100,6 +101,7 @@ describe('sim 与 core 集成', () => {
 
   it('批量战斗有分关结果，且大招间隔可测', () => {
     const metrics = runBattleBatch(cfg, config, { battlesPerStage: 20, seed: 5 });
+    expect(metrics.ai).toBe('sim');
     expect(metrics.status).toBe('ok');
     expect(metrics.perStage.map((stage) => stage.stageId)).toEqual([
       'stage_1',
@@ -139,5 +141,49 @@ describe('sim 与 core 集成', () => {
       expect(Number.isFinite(point.geneDust)).toBe(true);
       expect(point.coin).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+
+describe('P-049：两套 AI 与真实玩家路径', () => {
+  const config = loadConfig();
+  const cfg = createConfigRepo(config);
+
+  it('core autoCommand 与 sim 策略都能跑出结果', () => {
+    const sim = runBattleBatch(cfg, config, { battlesPerStage: 20, seed: 11, ai: 'sim' });
+    const core = runBattleBatch(cfg, config, { battlesPerStage: 20, seed: 11, ai: 'core' });
+    expect(sim.ai).toBe('sim');
+    expect(core.ai).toBe('core');
+    expect(sim.status).toBe('ok');
+    expect(core.status).toBe('ok');
+    expect(sim.battles).toBe(100);
+    expect(core.battles).toBe(100);
+    expect(core.smallCastsPerUnitTurn).toBeGreaterThanOrEqual(0);
+    expect(sim.invalidNumbers).toBe(0);
+    expect(core.invalidNumbers).toBe(0);
+  });
+
+  it('真实玩家路径含支出且不出现负资源', () => {
+    const path = runPlayerPathCurve(cfg, config, 7);
+    expect(path.status).toBe('ok');
+    expect(path.expenses.feedCoin).toBeGreaterThan(0);
+    expect(path.expenses.breedCoin).toBeGreaterThan(0);
+    expect(path.expenses.upgradeCoin).toBeGreaterThan(0);
+    expect(path.finalLevel).toBeGreaterThanOrEqual(5);
+    expect(path.points.some((point) => point.coin < 0 || point.food < 0)).toBe(false);
+    for (const point of path.points) {
+      expect(Number.isFinite(point.coin)).toBe(true);
+      expect(Number.isFinite(point.avgMood)).toBe(true);
+    }
+  });
+
+  it('5000 次繁殖的突变率带 Wilson 置信区间', () => {
+    const stats = runBreedingBatch(cfg, config, { samples: 200, seed: 7 });
+    expect(stats.status).toBe('ok');
+    const [lo, hi] = stats.overall.mutationRateCI;
+    expect(lo).toBeLessThanOrEqual(stats.overall.mutationRate);
+    expect(hi).toBeGreaterThanOrEqual(stats.overall.mutationRate);
+    expect(stats.inbred?.mutationRateCI[1]).toBeGreaterThan(0);
+    expect(stats.inbred!.geneMeanCI.hp).toBeGreaterThan(0);
   });
 });

@@ -2,6 +2,8 @@
 
 export type SimStatus = 'ok' | 'unavailable';
 export type CheckLevel = 'pass' | 'warn' | 'fail';
+/** `sim` = sim 自带的留能量策略；`core` = BattleEngine.autoCommand（P-049）。 */
+export type AiMode = 'sim' | 'core';
 
 export interface SimCheck {
   id: string;
@@ -63,6 +65,7 @@ export interface StageBattleStats {
 export interface BattleMetrics {
   status: SimStatus;
   reason?: string;
+  ai: AiMode;
   battles: number;
   wins: number;
   losses: number;
@@ -108,6 +111,51 @@ export interface EconomyCurve {
   hasNegativeValues: boolean;
 }
 
+/** 真实玩家路径（每 8h 一次上线；喂养/陪玩/清洁/繁殖/升级都计入支出）。 */
+export interface PlayerPathPoint {
+  day: number;
+  hour: number;
+  coin: number;
+  food: number;
+  geneDust: number;
+  level: number;
+  exp: number;
+  habitatLevel: number;
+  breeds: number;
+  feeds: number;
+  avgHunger: number;
+  avgMood: number;
+  avgHygiene: number;
+}
+
+export interface PlayerPathCurve {
+  status: SimStatus;
+  reason?: string;
+  days: number;
+  points: PlayerPathPoint[];
+  dayEnd: PlayerPathPoint[];
+  /** 路径口径的支出汇总。 */
+  expenses: {
+    feedCoin: number;
+    breedCoin: number;
+    breedFood: number;
+    upgradeCoin: number;
+    upgradeGeneDust: number;
+  };
+  /** 路径口径的收入汇总。 */
+  income: {
+    stageCoin: number;
+    stageFood: number;
+    stageGeneDust: number;
+    producedCoin: number;
+    producedFood: number;
+    producedGeneDust: number;
+  };
+  totalExp: number;
+  finalLevel: number;
+  notes: string[];
+}
+
 export interface GeneSummary {
   mean: Record<'hp' | 'atk' | 'def' | 'spd', number>;
   std: Record<'hp' | 'atk' | 'def' | 'spd', number>;
@@ -116,7 +164,11 @@ export interface GeneSummary {
 export interface BreedingGroup {
   samples: number;
   gene: GeneSummary;
+  /** 四项基因均值的 95% 置信区间（±1.96·SE）。 */
+  geneMeanCI: Record<'hp' | 'atk' | 'def' | 'spd', number>;
   mutationRate: number;
+  /** 突变率的 Wilson 95% 置信区间。 */
+  mutationRateCI: [number, number];
   avgExpressedTraits: number;
 }
 
@@ -129,6 +181,8 @@ export interface BreedingStats {
   overall: BreedingGroup;
   /** 随机 founder 配对中的近亲比例；founder 互不相关，预期 0。 */
   randomInbredRate: number;
+  /** 随机配对近亲率的 Wilson 95% 置信区间。 */
+  randomInbredRateCI: [number, number];
   /** 构造出的近亲配对（父 × 亲女）中被 `isInbred` 判定的比例；预期 1。 */
   inbredRate: number;
   /** 对照组（亲女 × 无关 founder）中被误判为近亲的比例；预期 0。 */
@@ -145,7 +199,11 @@ export interface BalanceReport {
   contentVersion: string;
   seed: number;
   static: StaticAnalysis;
-  battle: BattleMetrics;
-  economy: EconomyCurve;
+  /** 两套 AI 各跑一遍（P-049）；未启用的那套为 unavailable。 */
+  battle: Record<AiMode, BattleMetrics>;
+  /** 只产出、不喂养；用于对比。 */
+  economyPassive: EconomyCurve;
+  /** 真实玩家路径：含喂养/陪玩/清洁/繁殖/升级支出。 */
+  playerPath: PlayerPathCurve;
   breeding: BreedingStats;
 }

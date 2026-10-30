@@ -1,14 +1,14 @@
 /**
  * `pnpm sim`
  *
- * 批量战斗 / 7 天资源曲线 / 1000 次繁殖，并把结果写入 `docs/BALANCE.md` 的
- * 自动段落（`--write`）。core 未实现的部分如实标为 unavailable，不编造数据。
+ * 批量战斗（sim AI + core AI 两套，P-049） / 7 天资源曲线（只产出 + 真实路径） /
+ * 5000 次繁殖，并把结果写入 `docs/BALANCE.md` 的自动段落（`--write`）。
  *
  * 用法：
  *   pnpm sim
- *   pnpm sim -- --battles=1000 --breed=1000 --days=7 --seed=20261029
- *   pnpm sim -- --stage=stage_3 --no-battle
- *   pnpm sim -- --write --out=docs/BALANCE.md
+ *   pnpm sim --battles=1000 --breed=5000 --days=7 --seed=20261029
+ *   pnpm sim --ai=core --stage=stage_3 --no-battle
+ *   pnpm sim --write --out=docs/BALANCE.md
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -25,10 +25,14 @@ import {
   runBattleBatch,
   runBreedingBatch,
   runEconomyCurve,
+  runPlayerPathCurve,
   unavailableBattle,
   unavailableBreeding,
   unavailableEconomy,
+  unavailablePlayerPath,
+  type AiMode,
   type BalanceReport,
+  type BattleMetrics,
 } from './index.js';
 
 interface CliOptions {
@@ -40,17 +44,19 @@ interface CliOptions {
   out: string;
   write: boolean;
   noBattle: boolean;
+  ai: 'both' | AiMode;
   help: boolean;
 }
 
 const DEFAULT_OPTIONS: CliOptions = {
   battles: 1000,
-  breed: 1000,
+  breed: 5000,
   days: 7,
   seed: 20261029,
   out: 'docs/BALANCE.md',
   write: false,
   noBattle: false,
+  ai: 'both',
   help: false,
 };
 
@@ -58,11 +64,12 @@ const USAGE = [
   'pnpm sim [options]',
   '',
   '  --battles=N     每关对局数（默认 1000）',
-  '  --breed=N       繁殖样本数（默认 1000）',
+  '  --breed=N       繁殖样本数（默认 5000）',
   '  --days=N        经济曲线天数（默认 7）',
   '  --seed=N        随机种子（默认 20261029）',
   '  --stage=ID      只跑指定关卡（默认全部 5 关）',
   '  --no-battle     跳过战斗模拟',
+  '  --ai=both|sim|core  决策来源（默认 both，P-049）',
   '  --write         把结果写入 docs/BALANCE.md 的自动段落',
   '  --out=PATH      输出文件（默认 docs/BALANCE.md）',
   '  --help          显示本帮助',
@@ -121,6 +128,12 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         if (value === undefined || value.length === 0) throw new CliError('--out 需要路径');
         options.out = value;
         break;
+      case 'ai':
+        if (value !== 'both' && value !== 'sim' && value !== 'core') {
+          throw new CliError('--ai 需要 both / sim / core');
+        }
+        options.ai = value;
+        break;
       default:
         throw new CliError(`未知选项 "--${key}"`);
     }
@@ -173,17 +186,29 @@ function main(): void {
     coreReason = describeError(error);
   }
 
-  const battle = options.noBattle
-    ? unavailableBattle('--no-battle')
-    : cfg
-      ? runBattleBatch(cfg, data, {
-          battlesPerStage: options.battles,
-          seed: options.seed,
-          stageId: options.stageId,
-        })
-      : unavailableBattle(coreReason);
+  const aiModes: AiMode[] = options.ai === 'both' ? ['sim', 'core'] : [options.ai];
+  const runBattle = (mode: AiMode): BattleMetrics => {
+    if (options.noBattle) return unavailableBattle('--no-battle', mode);
+    if (!aiModes.includes(mode)) return unavailableBattle(`--ai=${options.ai} 未启用`, mode);
+    if (!cfg) return unavailableBattle(coreReason, mode);
+    return runBattleBatch(cfg, data, {
+      battlesPerStage: options.battles,
+      seed: options.seed,
+      stageId: options.stageId,
+      ai: mode,
+    });
+  };
+  const battle: Record<AiMode, BattleMetrics> = {
+    sim: runBattle('sim'),
+    core: runBattle('core'),
+  };
 
-  const economy = cfg ? runEconomyCurve(cfg, data, options.days) : unavailableEconomy(coreReason, options.days);
+  const economyPassive = cfg
+    ? runEconomyCurve(cfg, data, options.days)
+    : unavailableEconomy(coreReason, options.days);
+  const playerPath = cfg
+    ? runPlayerPathCurve(cfg, data, options.days)
+    : unavailablePlayerPath(coreReason, options.days);
 
   const breeding = cfg
     ? runBreedingBatch(cfg, data, { samples: options.breed, seed: options.seed })
@@ -195,7 +220,8 @@ function main(): void {
     seed: options.seed,
     static: staticAnalysis,
     battle,
-    economy,
+    economyPassive,
+    playerPath,
     breeding,
   };
 

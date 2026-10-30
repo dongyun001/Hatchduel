@@ -17,6 +17,13 @@
         "level": 2,
         "geneQuality": 40,
         "traits": []
+      },
+      {
+        "speciesId": "frog",
+        "elementId": "water",
+        "level": 1,
+        "geneQuality": 30,
+        "traits": []
       }
     ],
     "rewards": {
@@ -45,21 +52,21 @@
         "speciesId": "turtle",
         "elementId": "earth",
         "level": 3,
-        "geneQuality": 41,
+        "geneQuality": 44,
         "traits": []
       },
       {
         "speciesId": "frog",
         "elementId": "grass",
         "level": 3,
-        "geneQuality": 42,
+        "geneQuality": 45,
         "traits": []
       },
       {
         "speciesId": "fish",
         "elementId": "water",
         "level": 4,
-        "geneQuality": 44,
+        "geneQuality": 47,
         "traits": []
       }
     ],
@@ -139,15 +146,15 @@
       {
         "speciesId": "snake",
         "elementId": "earth",
-        "level": 7,
-        "geneQuality": 50,
+        "level": 8,
+        "geneQuality": 51,
         "traits": []
       },
       {
         "speciesId": "fish",
         "elementId": "water",
-        "level": 7,
-        "geneQuality": 52,
+        "level": 8,
+        "geneQuality": 53,
         "traits": [
           "trait_swift"
         ]
@@ -156,7 +163,7 @@
         "speciesId": "frog",
         "elementId": "grass",
         "level": 8,
-        "geneQuality": 52,
+        "geneQuality": 53,
         "traits": []
       }
     ],
@@ -190,26 +197,24 @@
       {
         "speciesId": "turtle",
         "elementId": "water",
-        "level": 7,
-        "geneQuality": 52,
+        "level": 8,
+        "geneQuality": 58,
         "traits": [
           "trait_sturdy"
         ]
       },
       {
-        "speciesId": "turtle",
-        "elementId": "earth",
+        "speciesId": "frog",
+        "elementId": "grass",
         "level": 8,
-        "geneQuality": 54,
-        "traits": [
-          "trait_sturdy"
-        ]
+        "geneQuality": 60,
+        "traits": []
       },
       {
         "speciesId": "snake",
         "elementId": "thunder",
         "level": 8,
-        "geneQuality": 56,
+        "geneQuality": 62,
         "traits": []
       }
     ],

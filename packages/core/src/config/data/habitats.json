@@ -33,7 +33,7 @@
       "mood": 2,
       "hygiene": 2
     },
-    "hungerPenaltyWhenNoFoodPerHour": 0,
+    "hungerPenaltyWhenNoFoodPerHour": 1.5,
     "productionStageMul": {
       "juvenile": 0.5,
       "adult": 1,
@@ -83,6 +83,10 @@
           "productionMul": 1.3
         }
       ]
+    },
+    "careRecoveryPerAction": {
+      "clean": 20,
+      "play": 20
     }
   }
 ]

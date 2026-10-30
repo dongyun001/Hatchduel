@@ -37,16 +37,36 @@ function describeError(error: unknown): string {
   return String(error);
 }
 
+function emptyGroup(): BreedingGroup {
+  return {
+    samples: 0,
+    gene: { mean: { hp: 0, atk: 0, def: 0, spd: 0 }, std: { hp: 0, atk: 0, def: 0, spd: 0 } },
+    geneMeanCI: { hp: 0, atk: 0, def: 0, spd: 0 },
+    mutationRate: 0,
+    mutationRateCI: [0, 0],
+    avgExpressedTraits: 0,
+  };
+}
+
+function wilsonInterval(p: number, n: number): [number, number] {
+  if (n === 0) return [0, 0];
+  const z = 1.96;
+  const denom = 1 + (z * z) / n;
+  const center = (p + (z * z) / (2 * n)) / denom;
+  const half = (z / denom) * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return [round(Math.max(0, center - half), 4), round(Math.min(1, center + half), 4)];
+}
+
 export function unavailableBreeding(reason: string): BreedingStats {
-  const emptyGene: GeneSummary = { mean: { hp: 0, atk: 0, def: 0, spd: 0 }, std: { hp: 0, atk: 0, def: 0, spd: 0 } };
   return {
     status: 'unavailable',
     reason,
     samples: 0,
     species: {},
     element: {},
-    overall: { samples: 0, gene: emptyGene, mutationRate: 0, avgExpressedTraits: 0 },
+    overall: emptyGroup(),
     randomInbredRate: 0,
+    randomInbredRateCI: [0, 0],
     inbredRate: 0,
     controlInbredRate: 0,
     ancestorVerified: false,
@@ -62,23 +82,30 @@ function summarize(children: readonly PetInstance[]): BreedingGroup {
     mean: { hp: 0, atk: 0, def: 0, spd: 0 },
     std: { hp: 0, atk: 0, def: 0, spd: 0 },
   };
-  if (samples === 0) return { samples, gene, mutationRate: 0, avgExpressedTraits: 0 };
+  const geneMeanCI: BreedingGroup['geneMeanCI'] = { hp: 0, atk: 0, def: 0, spd: 0 };
+  if (samples === 0) return emptyGroup();
 
   for (const key of GENE_KEYS) {
     const values = children.map((child) => child.genome.stats[key]);
     const mean = values.reduce((sum, value) => sum + value, 0) / samples;
     const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / samples;
+    const std = Math.sqrt(variance);
     gene.mean[key] = round(mean);
-    gene.std[key] = round(Math.sqrt(variance));
+    gene.std[key] = round(std);
+    // 均值 95% 置信半宽 = 1.96 × SE
+    geneMeanCI[key] = round((1.96 * std) / Math.sqrt(samples), 3);
   }
 
   const mutations = children.filter((child) => child.genome.mutationCount > 0).length;
   const traits = children.reduce((sum, child) => sum + child.traits.length, 0);
+  const mutationRate = mutations / samples;
 
   return {
     samples,
     gene,
-    mutationRate: round(mutations / samples),
+    geneMeanCI,
+    mutationRate: round(mutationRate),
+    mutationRateCI: wilsonInterval(mutationRate, samples),
     avgExpressedTraits: round(traits / samples, 2),
   };
 }
@@ -177,6 +204,10 @@ export function runBreedingBatch(
       element,
       overall: summarize(children),
       randomInbredRate: round(randomInbredCount / Math.max(1, options.samples)),
+      randomInbredRateCI: wilsonInterval(
+        randomInbredCount / Math.max(1, options.samples),
+        options.samples,
+      ),
       inbredRate: inbredDetected ? 1 : 0,
       controlInbredRate: controlDetected ? 1 : 0,
       ancestorVerified,
