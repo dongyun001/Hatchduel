@@ -12,6 +12,7 @@ import { TimeError } from './errors.js';
 import type { EpochMs, Id, ResourceId } from './types/common.js';
 import type { HabitatId, PetId, PetInstance } from './types/pet.js';
 import type { HabitatInstance, Profile, ProfilePatch, ResourceBag, ResourceCost } from './types/profile.js';
+import { buildProfilePatch } from './profile-patch.js';
 
 export type HabitatErrorCode =
   | 'pet_not_found'
@@ -47,8 +48,8 @@ function clamp(value: number, min: number, max: number): number {
   return value;
 }
 
-function sameJson(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+function resultOf(before: Profile, after: Profile, now: EpochMs): HabitatOpResult {
+  return { profile: after, patch: buildProfilePatch(before, after, now) };
 }
 
 function assertTime(profile: Profile, now: EpochMs): void {
@@ -89,15 +90,14 @@ function assertNotEmptyEgg(pet: PetInstance): void {
 }
 
 /** 扣资源；不足抛 `insufficient_resources`。 */
-function spend(
-  profile: Profile,
-  cost: readonly ResourceCost[],
-): Profile['currencies'] {
+function spend(profile: Profile, cost: readonly ResourceCost[]): Profile['currencies'] {
   const currencies = { ...profile.currencies };
   for (const item of cost) {
     if ((currencies[item.resource] ?? 0) < item.amount) fail('insufficient_resources');
   }
-  for (const item of cost) currencies[item.resource] = (currencies[item.resource] ?? 0) - item.amount;
+  for (const item of cost) {
+    currencies[item.resource] = (currencies[item.resource] ?? 0) - item.amount;
+  }
   return currencies;
 }
 
@@ -111,37 +111,6 @@ function withHabitat(profile: Profile, habitat: HabitatInstance): Profile {
 
 function withCurrencies(profile: Profile, currencies: Profile['currencies']): Profile {
   return { ...profile, currencies };
-}
-
-function diffUpsert<T extends { id: string }>(
-  before: Record<string, T>,
-  after: Record<string, T>,
-): T[] | undefined {
-  const upsert: T[] = [];
-  for (const [id, item] of Object.entries(after)) {
-    const previous = before[id];
-    if (!previous || !sameJson(previous, item)) upsert.push(item);
-  }
-  return upsert.length > 0 ? upsert : undefined;
-}
-
-/** 构造只含本次改动、`revision` 保持输入的 patch。 */
-function resultOf(before: Profile, after: Profile, now: EpochMs): HabitatOpResult {
-  const patch: ProfilePatch = {
-    fromRevision: before.revision,
-    toRevision: before.revision,
-    at: now,
-    lastEvaluatedAt: after.lastEvaluatedAt,
-  };
-  if (!sameJson(before.currencies, after.currencies)) patch.currencies = after.currencies;
-
-  const pets = diffUpsert(before.pets, after.pets);
-  if (pets) patch.pets = { upsert: pets };
-
-  const habitats = diffUpsert(before.habitats, after.habitats);
-  if (habitats) patch.habitats = { upsert: habitats };
-
-  return { profile: after, patch };
 }
 
 /** 把槽位补齐/裁剪到容量；裁剪时若末尾还有宠物则拒绝（数据不一致）。 */

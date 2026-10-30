@@ -64,6 +64,11 @@ export interface BattleUnit {
   energy: number;
   alive: boolean;
   buffs: BattleBuff[];
+  /**
+   * 技能冷却：`skillId → 剩余回合数`（contract-v1.4 D-18）。
+   * 只有配置了 `SkillConfig.cooldown` 的技能才会出现在这里；字段缺省表示没有冷却。
+   */
+  cooldowns?: Record<Id, number>;
 }
 
 /** 指令。客户端只能提交动作，不能提交结果。 */

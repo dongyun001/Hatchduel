@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 项目代号 | PetBattle |
-| 文档版本 | v1.4 |
+| 文档版本 | v1.5 |
 | 日期 | 2026-10-28 |
 | 对应需求 | PRD v1.1 |
 | 状态 | 待评审 |
@@ -19,6 +19,7 @@
 | v1.2 | 2026-10-29 | 追加 §15 实现说明（A 会话，contract-v1）：派生属性取整口径、推进顺序落地、繁殖冷却、战斗状态与契约缺口 |
 | v1.3 | 2026-10-29 | contract-v1.2 D-01~D-07：releasePet 带 cfg、BreedResult.parentCooldowns、autoCommand、applyExp、栖息地两个可选字段、暴击倍率口径 |
 | v1.4 | 2026-10-29 | contract-v1.3 D-08~D-14：测试与生产数据解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 careRecoveryPerAction、hit 加法语义、inheritance.weight 标 reserved |
+| v1.5 | 2026-10-29 | contract-v1.4 D-16~D-18：applyProfilePatch、startBreeding 编排与 BreedingError、技能回合冷却 |
 
 ---
 
@@ -757,6 +758,22 @@ function releaseValue(pet: PetInstance): number {
 
 ---
 
+### 8.7 繁殖编排（startBreeding）
+
+`startBreeding(profile, parentAId, parentBId, now, cfg, rng) → { profile, patch, child, inbred, parentCooldowns }`
+（contract-v1.4 D-17）：
+
+1. 父母 id 必须存在（否则 `BreedingError('not_found')`）；
+2. `checkBreeding` 全部通过，否则抛 `BreedingError(reason)`；
+3. 扣 `breeding.cost`（`BreedingError('cost')`）；
+4. `breed` 生成子代；
+5. 子代写入 `profile.pets` 与 `profile.breeding.eggs`；父母 `fertility.cooldownUntil` 与
+   `profile.breeding.cooldowns` 都写 `parentCooldowns`；`stats.breeds += 1`。
+
+不推进时间（服务端先 `advanceProfile`），不改 revision；`patch` 的 `fromRevision = toRevision = 输入 revision`。
+
+---
+
 ## 9. 战斗输入
 
 ```ts
@@ -838,6 +855,9 @@ type BattleEvent =
 ```
 
 - **初始精力 0**。
+- 技能冷却（contract-v1.4 D-18）：`BattleUnit.cooldowns?: Record<Id, number>` 记录剩余回合；
+  cast 后按 `SkillConfig.cooldown` 写入 `cooldown + 1`，每回合开始递减，归零即删除；
+  剩余 > 0 时 `availableCommands` 不返回该技能、直接提交会被拒绝。没有 `cooldown` 配置时单位不带该字段，行为不变。
 - 同类 buff 不叠加，只刷新时长与数值（取更强）。
 - 眩晕：轮到该单位时跳过行动，当回合消耗。
 - DOT 不占行动。
@@ -989,7 +1009,7 @@ interface Profile {
 
 ---
 
-## 15. 实现说明（contract-v1.3，A 会话）
+## 15. 实现说明（contract-v1.4，A 会话）
 
 > 本节只记录 `packages/core` 的实现口径，不改变 §1~§13 的产品规则。
 
@@ -1080,3 +1100,29 @@ interface Profile {
 - `buildPveBattleSetup(party, stage, cfg, seed)`：`team0` 复用 `buildBattleSetup`（uid `a*`，最多 3 只），
   `team1` 复用 `buildEnemyTeam`（uid `b*`）；只做组合，不新增数值规则。
 
+### 15.9 存档增量应用（D-16）
+
+`applyProfilePatch(profile, patch) → Profile`（纯函数）：
+
+- `pets` / `habitats`：先 upsert 再 remove，**remove 优先**（同一 id 两边出现时删除生效，P-047）；
+- `currencies`：patch 里的资源是**绝对值**，按 key 覆盖（`{...profile.currencies, ...patch.currencies}`），不做累加；
+- `codex`：`seen`/`owned` 只允许 false→true，`bestGene` 取较大值；不会因放生回退；
+- `lineup / stageProgress / breeding / pvp / settings / stats`：整体替换；
+- `revision = patch.toRevision`，`lastEvaluatedAt = patch.lastEvaluatedAt`，不校验 `fromRevision`；
+- 始终返回新的 `pets`/`habitats` 容器，不修改入参。
+
+> 服务端可以用它对「推进 patch + 端点 patch」合并后的结果做自检；客户端可直接应用下发 patch。
+
+### 15.10 繁殖编排（D-17）
+
+- `startBreeding` 只在 core 里做校验/扣费/落蛋/冷却，不推进时间、不写 revision；
+- 失败统一抛 `BreedingError`，`reason: BreedError | 'not_found'`（父母 id 不在存档里）；
+- 父母的 `fertility.cooldownUntil` 与 `profile.breeding.cooldowns` 同时写 `parentCooldowns`，两者口径一致；
+- `stats.breeds + 1`；`stats.hatchlings` 在领取孵化时再由服务端 +1（不在本函数）。
+
+### 15.11 技能冷却（D-18）
+
+- 存储：`BattleUnit.cooldowns?: Record<Id, number>`，只有配置了 `SkillConfig.cooldown > 0` 的技能才会出现；
+- cast 成功（含未命中）后写入 `cooldown + 1`；每回合开始对所有存活单位递减，减到 0 即删除；
+- `availableCommands` 跳过剩余 > 0 的技能；`submit` 也会拒绝（防止绕过）；
+- 没有 cooldown 配置的战斗不会创建该字段，事件流与旧版本逐条一致（确定性指纹不变）。
