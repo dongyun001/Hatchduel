@@ -580,6 +580,20 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 经济/繁殖 | 只产出 2445/621/173；玩家路径 6844/958/211；5000 次突变率 0.037 [0.032,0.043] |
 | 已知偏差 | stage_1 5.62 回合作教学关节奏；stage_4 core 0.589 接近上限；近亲加成实测 +0.013；玩家路径仍偏乐观 |
 
+### 11.11 C 第四批集成（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 454 passed（36 文件，本批 +30） |
+| PvE | start 校验解锁/编队/seed 服务端生成；claim 重放、首通/重复、失败无奖、平局按失败、多余指令忽略；旧会话 start 失效 |
+| 繁殖 | `/breeding/start` 错误按 reason 映射；`/breeding/claim` 三态；成功后 `stats.hatchlings + 1` |
+| 迁移 | `schema_migrations` 台账；002 条件重建；重启不再清空会话（P-050） |
+| 冒烟 | 登录 → 编队 → start → 重放 6 回合 → claim：winner 0、firstClear、资源 120/10/3 + petExp 40；重放 409 ALREADY_CLAIMED；stage_1 cleared；繁殖 start 200、claim 409 EGG_NOT_READY；stage_1 无首通蛋，宠物仍 3 只（符合数据） |
+| Postgres | 迁移台账 001/002；PvE/繁殖全链路；重启后 hatchlings=1、蛋出栏、started 会话保留 |
+| 待办 | `createRng(seed)` 尚未从 core 公共入口导出；服务端暂用本地 CSPRNG 适配（繁殖结果落库、不重放） |
+
+**E-09（待 A 补）**：从 `@petbattle/core` 公共入口导出 `createRng(seed: number): Rng`（内部复用 mulberry32）。导出后服务端一行替换本地适配；在此之前允许服务端用 CSPRNG 构造同接口 Rng，但必须在文档注明“繁殖结果落库、不重放”。
+
 ## 12. 变更记录
 
 | 版本 | 日期 | 说明 |
@@ -590,3 +604,4 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | contract-v1.3 | 2026-10-29 | 解除 D/C 阻塞（D-08~D-15）：测试解耦、AI 留能量、PvE setup、放生拒绝防守阵容、栖息地操作函数与 `/habitat/move` 端点、`hit` 修正 |
 | contract-v1.4 | 2026-10-29 | 预裁定第四批（D-16~D-18）：`applyProfilePatch`、`startBreeding`、技能回合冷却 |
 | contract-v1.5 | 2026-10-29 | 关闭 PvE 与繁殖领取未决项（E-01~E-08）：会话 TTL/重放/奖励/首通蛋/图鉴/繁殖领取；新增两个错误码与 `expiresAt` |
+| contract-v1.5.1 | 2026-10-29 | E-09：待导出 `createRng(seed)`；服务端 CSPRNG 适配为临时方案（不改变 E-01~E-08） |
