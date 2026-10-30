@@ -9,8 +9,7 @@ import {
   BattleEngine,
   CoreNotImplementedError,
   MAX_TURNS,
-  buildBattleSetup,
-  buildEnemyTeam,
+  buildPveBattleSetup,
   type BattleEvent,
   type BattleSetup,
   type Command,
@@ -23,13 +22,15 @@ import {
 
 import { PLAYER_LEVEL_BY_ORDER, STARTERS, makeAdultPet } from './fixtures.js';
 import { createRng } from './rng.js';
-import type { BattleMetrics, SimStatus, StageBattleStats } from './types.js';
+import type { AiMode, BattleMetrics, SimStatus, StageBattleStats } from './types.js';
 
 export interface BattleBatchOptions {
   /** 每关对局数；默认 1000。 */
   battlesPerStage: number;
   seed: number;
   stageId?: string;
+  /** 决策来源：sim 自带策略或 core `autoCommand`（P-049）；默认 sim。 */
+  ai?: AiMode;
 }
 
 interface BattleOutcome {
@@ -56,10 +57,11 @@ function describeError(error: unknown): string {
   return String(error);
 }
 
-export function unavailableBattle(reason: string): BattleMetrics {
+export function unavailableBattle(reason: string, ai: AiMode = 'sim'): BattleMetrics {
   return {
     status: 'unavailable',
     reason,
+    ai,
     battles: 0,
     wins: 0,
     losses: 0,
@@ -91,6 +93,7 @@ function pickCommand(
   rng: Rng,
   unitSkills: readonly string[],
   energy: number,
+  allyHurt: boolean,
 ): Command {
   const skills = commands.filter(
     (command): command is Extract<Command, { type: 'skill' }> => command.type === 'skill',
@@ -102,6 +105,15 @@ function pickCommand(
   }
 
   const input = (command: Extract<Command, { type: 'skill' }>): Command => command;
+
+  // 与 core AI 一致：有队友 <50% 且能治疗时优先治疗（否则 sim 策略会在 4 关被 DoT 拖死）。
+  if (allyHurt) {
+    const heals = skills.filter((command) => {
+      const skill = cfg.skill(command.skillId);
+      return skill.power === 0 && skill.effects.some((effect) => effect.kind === 'heal');
+    });
+    if (heals.length > 0) return rng.pick(heals);
+  }
   const byCost = (list: readonly Extract<Command, { type: 'skill' }>[]): Command[] => {
     let bestCost = -1;
     let best: Command[] = [];
@@ -141,6 +153,7 @@ function playOneBattle(
   setup: BattleSetup,
   cfg: ConfigRepo,
   rng: Rng,
+  ai: AiMode,
 ): BattleOutcome {
   const engine = BattleEngine.create(setup, cfg);
   const ultimateTurnsByUnit = new Map<string, number[]>();
@@ -154,8 +167,19 @@ function playOneBattle(
     if (!uid) break;
     const commands = engine.availableCommands(uid);
     if (commands.length === 0) break;
-    const actor = state.units.find((unit) => unit.uid === uid);
-    engine.submit(pickCommand(commands, cfg, rng, actor?.skills ?? [], actor?.energy ?? 0));
+    if (ai === 'core') {
+      engine.submit(engine.autoCommand(uid));
+    } else {
+      const actor = state.units.find((unit) => unit.uid === uid);
+      const allyHurt = actor
+        ? state.units.some(
+            (unit) => unit.team === actor.team && unit.alive && unit.hp / unit.maxHp < 0.5,
+          )
+        : false;
+      engine.submit(
+        pickCommand(commands, cfg, rng, actor?.skills ?? [], actor?.energy ?? 0, allyHurt),
+      );
+    }
     guard += 1;
   }
 
@@ -249,12 +273,13 @@ export function runBattleBatch(
   data: ConfigData,
   options: BattleBatchOptions,
 ): BattleMetrics {
+  const ai: AiMode = options.ai ?? 'sim';
   const stages = options.stageId
     ? data.stages.filter((stage) => stage.id === options.stageId)
     : [...data.stages].sort((a, b) => a.order - b.order);
 
   if (stages.length === 0) {
-    return unavailableBattle(`找不到关卡 ${options.stageId ?? '<all>'}`);
+    return unavailableBattle(`找不到关卡 ${options.stageId ?? '<all>'}`, ai);
   }
 
   let wins = 0;
@@ -285,10 +310,8 @@ export function runBattleBatch(
         const seed = options.seed + stageIndex * 100_000 + index;
         const rng = createRng(seed);
         try {
-          const playerSetup = buildBattleSetup([pets, pets], cfg, seed);
-          const enemy = buildEnemyTeam(stage, cfg, seed);
-          const setup: BattleSetup = { seed, teams: [playerSetup.teams[0], enemy] };
-          const outcome = playOneBattle(setup, cfg, rng);
+          const setup: BattleSetup = buildPveBattleSetup(pets, stage, cfg, seed);
+          const outcome = playOneBattle(setup, cfg, rng, ai);
 
           battles += 1;
           stageBattles += 1;
@@ -334,13 +357,14 @@ export function runBattleBatch(
   }
 
   if (battles === 0) {
-    return unavailableBattle(firstError ? describeError(firstError) : '没有成功完成任何对局');
+    return unavailableBattle(firstError ? describeError(firstError) : '没有成功完成任何对局', ai);
   }
 
   const status: SimStatus = 'ok';
   return {
     status,
     reason: firstError ? `部分对局失败：${describeError(firstError)}` : undefined,
+    ai,
     battles,
     wins,
     losses,

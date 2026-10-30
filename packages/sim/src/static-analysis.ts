@@ -74,10 +74,14 @@ export function analyzeConfig(data: ConfigData): StaticAnalysis {
       });
     }
     if (trait.statMods && 'hit' in trait.statMods) {
+      const hit = trait.statMods.hit ?? 0;
+      const ok = hit >= 0.02 && hit <= 0.05;
       checks.push({
         id: `traits.hit.${trait.id}`,
-        level: 'warn',
-        detail: `${trait.id} 用乘数修正 hit；hit 基准为 0，乘数不会产生效果（P-003 语义）。`,
+        level: ok ? 'pass' : 'warn',
+        detail: ok
+          ? `${trait.id} 用加法修正 hit=${hit}（0.02~0.05，contract-v1.3 D-13）。`
+          : `${trait.id} 的 hit=${hit} 不在 0.02~0.05 加法量级，可能被 clamp 或当成乘数。`,
       });
     }
   }

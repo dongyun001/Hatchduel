@@ -2,6 +2,7 @@
 export const SIM_STATUS = 'beta' as const;
 
 export type {
+  AiMode,
   BalanceReport,
   BattleMetrics,
   BreedingGroup,
@@ -10,6 +11,8 @@ export type {
   EconomyCurve,
   EconomyPoint,
   GeneSummary,
+  PlayerPathCurve,
+  PlayerPathPoint,
   SimCheck,
   SimStatus,
   StageBattleStats,
@@ -21,6 +24,7 @@ export { loadConfig } from './config.js';
 export { analyzeConfig } from './static-analysis.js';
 export { runBattleBatch, unavailableBattle, type BattleBatchOptions } from './battle.js';
 export { runEconomyCurve, unavailableEconomy } from './economy.js';
+export { runPlayerPathCurve, unavailablePlayerPath } from './economy-path.js';
 export { runBreedingBatch, unavailableBreeding, type BreedingBatchOptions } from './breeding.js';
 export {
   SIM_BEGIN,

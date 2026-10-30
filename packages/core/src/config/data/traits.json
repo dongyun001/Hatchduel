@@ -4,60 +4,93 @@
     "name": "强健",
     "rarity": "common",
     "description": "防御 +5%。",
-    "statMods": { "def": 1.05 },
-    "inheritance": { "weight": 0.5 }
+    "statMods": {
+      "def": 1.05
+    },
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_swift",
     "name": "轻快",
     "rarity": "common",
     "description": "速度 +4%。",
-    "statMods": { "spd": 1.04 },
-    "inheritance": { "weight": 0.5 }
+    "statMods": {
+      "spd": 1.04
+    },
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_gourmand",
     "name": "贪吃",
     "rarity": "common",
     "description": "生命 +5%，栖息地产出 +10%。",
-    "statMods": { "hp": 1.05 },
+    "statMods": {
+      "hp": 1.05
+    },
     "productionMod": 1.1,
-    "inheritance": { "weight": 0.5 }
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_thick_skin",
     "name": "厚皮",
     "rarity": "common",
     "description": "防御 +6%。",
-    "statMods": { "def": 1.06 },
-    "battleTags": ["tank"],
-    "inheritance": { "weight": 0.5 }
+    "statMods": {
+      "def": 1.06
+    },
+    "battleTags": [
+      "tank"
+    ],
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_nimble",
     "name": "敏捷",
     "rarity": "common",
     "description": "速度 +3%，闪避 +5%。",
-    "statMods": { "spd": 1.03, "dodge": 1.05 },
-    "inheritance": { "weight": 0.5 }
+    "statMods": {
+      "spd": 1.03,
+      "dodge": 1.05
+    },
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_eager",
     "name": "好胜",
     "rarity": "common",
     "description": "攻击 +4%。",
-    "statMods": { "atk": 1.04 },
-    "battleTags": ["dps"],
-    "inheritance": { "weight": 0.5 }
+    "statMods": {
+      "atk": 1.04
+    },
+    "battleTags": [
+      "dps"
+    ],
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_cheerful",
     "name": "活泼",
     "rarity": "common",
     "description": "生命 +3%，栖息地产出 +6%。",
-    "statMods": { "hp": 1.03 },
+    "statMods": {
+      "hp": 1.03
+    },
     "productionMod": 1.06,
-    "inheritance": { "weight": 0.5 }
+    "inheritance": {
+      "weight": 0.5
+    }
   },
   {
     "id": "trait_diligent",
@@ -65,15 +98,33 @@
     "rarity": "common",
     "description": "栖息地产出 +8%。",
     "productionMod": 1.08,
-    "inheritance": { "weight": 0.5 }
+    "inheritance": {
+      "weight": 0.5
+    }
+  },
+  {
+    "id": "trait_precise",
+    "name": "精准",
+    "rarity": "rare",
+    "description": "命中修正 +0.03（加法，不乘算）。",
+    "statMods": {
+      "hit": 0.03
+    },
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_lucky",
     "name": "幸运",
     "rarity": "rare",
     "description": "暴击率提高 20%（相对）。",
-    "statMods": { "crit": 1.2 },
-    "inheritance": { "weight": 0.25 }
+    "statMods": {
+      "crit": 1.2
+    },
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_industrious",
@@ -81,77 +132,128 @@
     "rarity": "rare",
     "description": "栖息地产出 +20%。",
     "productionMod": 1.2,
-    "battleTags": ["farmer"],
-    "inheritance": { "weight": 0.25 }
+    "battleTags": [
+      "farmer"
+    ],
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_ferocious",
     "name": "凶猛",
     "rarity": "rare",
     "description": "攻击 +8%。",
-    "statMods": { "atk": 1.08 },
-    "battleTags": ["dps"],
-    "inheritance": { "weight": 0.25 }
+    "statMods": {
+      "atk": 1.08
+    },
+    "battleTags": [
+      "dps"
+    ],
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_iron_wall",
     "name": "铁壁",
     "rarity": "rare",
     "description": "防御 +9%。",
-    "statMods": { "def": 1.09 },
-    "battleTags": ["tank"],
-    "inheritance": { "weight": 0.25 }
+    "statMods": {
+      "def": 1.09
+    },
+    "battleTags": [
+      "tank"
+    ],
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_fleet",
     "name": "疾风",
     "rarity": "rare",
     "description": "速度 +8%。",
-    "statMods": { "spd": 1.08 },
-    "inheritance": { "weight": 0.25 }
+    "statMods": {
+      "spd": 1.08
+    },
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_vitality",
     "name": "强韧",
     "rarity": "rare",
     "description": "生命 +10%。",
-    "statMods": { "hp": 1.1 },
-    "inheritance": { "weight": 0.25 }
+    "statMods": {
+      "hp": 1.1
+    },
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_glass_cannon",
     "name": "玻璃大炮",
     "rarity": "rare",
     "description": "攻击 +15%，防御 -8%。",
-    "statMods": { "atk": 1.15, "def": 0.92 },
-    "battleTags": ["dps"],
-    "inheritance": { "weight": 0.25 }
+    "statMods": {
+      "atk": 1.15,
+      "def": 0.92
+    },
+    "battleTags": [
+      "dps"
+    ],
+    "inheritance": {
+      "weight": 0.25
+    }
   },
   {
     "id": "trait_legendary_blood",
     "name": "传奇血统",
     "rarity": "epic",
     "description": "生命与攻击 +10%，产出 +15%。",
-    "statMods": { "hp": 1.1, "atk": 1.1 },
+    "statMods": {
+      "hp": 1.1,
+      "atk": 1.1
+    },
     "productionMod": 1.15,
-    "inheritance": { "weight": 0.1 }
+    "inheritance": {
+      "weight": 0.1
+    }
   },
   {
     "id": "trait_ancient_guard",
     "name": "远古守护",
     "rarity": "epic",
     "description": "生命与防御 +12%。",
-    "statMods": { "hp": 1.12, "def": 1.12 },
-    "battleTags": ["tank"],
-    "inheritance": { "weight": 0.1 }
+    "statMods": {
+      "hp": 1.12,
+      "def": 1.12
+    },
+    "battleTags": [
+      "tank"
+    ],
+    "inheritance": {
+      "weight": 0.1
+    }
   },
   {
     "id": "trait_prodigy",
     "name": "天纵奇才",
     "rarity": "epic",
     "description": "攻击 +12%，速度 +10%，暴击率 +15%（相对）。",
-    "statMods": { "atk": 1.12, "spd": 1.1, "crit": 1.15 },
-    "battleTags": ["dps"],
-    "inheritance": { "weight": 0.1 }
+    "statMods": {
+      "atk": 1.12,
+      "spd": 1.1,
+      "crit": 1.15
+    },
+    "battleTags": [
+      "dps"
+    ],
+    "inheritance": {
+      "weight": 0.1
+    }
   }
 ]
