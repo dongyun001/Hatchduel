@@ -516,6 +516,7 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 错误映射 | HabitatError → NOT_FOUND/CAPACITY_FULL/INSUFFICIENT_RESOURCES/VALIDATION_FAILED |
 | 冒烟 | 内存：move 200、release 200、feed/clean/play 200、collect 200、upgrade 409（资源不足）、move-back 200；日志无降级 |
 | 测试 | 全仓 393 |
+| Postgres E2E | 登录 3 只 → move 移出 → release 返还 27 → 重启后 2 只、revision 2、codex owned 保持 true；迁移正常 |
 
 ### 11.8 B 第二批集成（2026-10-29）
 
