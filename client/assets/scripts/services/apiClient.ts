@@ -12,6 +12,10 @@ import type {
   ApiErrorCode,
   ApiResponse,
   AuthResponse,
+  ClaimBreedingRequest,
+  ClaimBreedingResponse,
+  ClaimPveBattleRequest,
+  ClaimPveBattleResponse,
   CleanPetRequest,
   CollectHabitatRequest,
   CollectHabitatResponse,
@@ -21,6 +25,12 @@ import type {
   ProfileWriteResponse,
   RevisionConflictDetails,
   RouteKey,
+  SetLineupRequest,
+  SetLineupResponse,
+  StartBreedingRequest,
+  StartBreedingResponse,
+  StartPveBattleRequest,
+  StartPveBattleResponse,
   UpgradeHabitatRequest,
 } from '../../lib/protocol';
 import type { PlatformAdapter } from '../platform';
@@ -162,6 +172,27 @@ export class ApiClient {
 
   movePetToHabitat(req: MovePetToHabitatRequest): Promise<ApiResponse<ProfileWriteResponse>> {
     return this.call('movePetToHabitat', req);
+  }
+
+  // —— 编队 / PvE / 繁殖 ——
+  setLineup(req: SetLineupRequest): Promise<ApiResponse<SetLineupResponse>> {
+    return this.call('setLineup', req);
+  }
+
+  startPveBattle(req: StartPveBattleRequest): Promise<ApiResponse<StartPveBattleResponse>> {
+    return this.call('startPveBattle', req);
+  }
+
+  claimPveBattle(req: ClaimPveBattleRequest): Promise<ApiResponse<ClaimPveBattleResponse>> {
+    return this.call('claimPveBattle', req);
+  }
+
+  startBreeding(req: StartBreedingRequest): Promise<ApiResponse<StartBreedingResponse>> {
+    return this.call('startBreeding', req);
+  }
+
+  claimBreeding(req: ClaimBreedingRequest): Promise<ApiResponse<ClaimBreedingResponse>> {
+    return this.call('claimBreeding', req);
   }
 
   async call<K extends RouteKey>(

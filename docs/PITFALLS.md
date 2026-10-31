@@ -361,6 +361,28 @@
 - **验证**：构建后 `assets/main/index.js` 中不再出现 `[].concat(new Set(`；详情页 traits 正常显示名称。
 - **关联**：`client/tools/sync-lib.mjs`、`packages/core/src/pet.ts`、`packages/core/src/breeding.ts`。
 
+### P-117 占位底图带描边，拉伸成大面板后变成粗边框
+
+- **日期**：2026-10-30
+- **发现者/会话**：B
+- **范围**：client
+- **现象**：全屏背景四周出现约 160px 宽的深色边框；面板/按钮也有很粗的暗边，看起来像游戏只渲染了 960×540。
+- **原因**：`white.png` 是 8×8 且带 1px 描边；用作纯色底图拉伸到 1920×1080 时，1/8 的描边被放大成 240 设计像素的粗边。
+- **规避**：纯色底图必须用**无描边**白图（`gen-placeholders.mjs` 对 `white` 关闭 border）；宠物/图标占位图保留描边。
+- **验证**：全屏背景下四角像素等于背景色（不是描边色）；面板无粗边框。
+- **关联**：`client/tools/gen-placeholders.mjs`、`client/assets/scripts/ui/nodes.ts`。
+
+### P-118 新增场景后 CLI 构建的默认初始场景漂移
+
+- **日期**：2026-10-30
+- **发现者/会话**：B
+- **范围**：client
+- **现象**：加入 `Battle.scene` 后，`--build "platform=web-mobile;debug=true"` 的 `settings.launch.launchScene` 变成 `Battle.scene`，启动直接进 Battle 且配置未加载，报“配置尚未加载”。
+- **原因**：CLI 未指定 `startScene` 时按场景资源顺序选第一个；新增场景改变了顺序（Battle 排在 Boot 前）。
+- **规避**：构建命令必须带 `startScene=<Boot 场景 uuid>`；Boot uuid 为 `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`。README 已更新。
+- **验证**：构建产物 `src/settings.json` 的 `launch.launchScene` 为 `db://assets/scenes/Boot.scene`。
+- **关联**：`client/README.md` 构建命令。
+
 ---
 
 ## 2.1 2026-10-28 评审补记
@@ -697,4 +719,5 @@
 | v1.6 | 2026-10-29 | 追加 P-113~P-115（B 客户端：手写场景 class id、spriteFrame 重置尺寸、设计分辨率与相机竞争） |
 | v1.7 | 2026-10-29 | 追加 P-049（sim 自带 AI 与 core autoCommand 漂移） |
 | v1.8 | 2026-10-29 | 追加 P-050（迁移盲跑重复 drop，清空 PvE 会话） |
-| v1.8 | 2026-10-30 | 追加 P-116（Cocos loose spread 把 `[...new Set]` 编译成 `[Set]`，客户端同步时改写） |
+| v1.9 | 2026-10-30 | 追加 P-116（Cocos loose spread 把 `[...new Set]` 编译成 `[Set]`，客户端同步时改写） |
+| v1.10 | 2026-10-30 | 追加 P-117/P-118（占位底图描边被拉伸成粗边框；CLI 构建初始场景漂移） |
