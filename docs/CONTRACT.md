@@ -60,7 +60,18 @@
 - TypeScript 5.9 / ESLint 9 / Vitest 3；**不要单个包自行升级大版本**，由 0 号统一。
 - 不要并行跑 `pnpm install`；lockfile 只由 0 号维护。
 
-### 2.3 CI
+### 2.3 CI 与客户端构建
+
+CI 只跑 Node 侧（install / typecheck / test / lint / validate / health / client lib sync），
+**不跑 Cocos 构建**（CI 无编辑器）。客户端合并前由 B 本地构建，命令必须显式带初始场景：
+
+```
+startScene=db://assets/scenes/Boot.scene
+```
+
+否则新增 Battle 场景后 CLI 默认启动场景会漂移（PITFALLS P-118）。
+
+
 
 `.github/workflows/ci.yml`：install → typecheck → test → lint → validate:config → 启动 server 并 curl `/health`。
 失败即阻断合并。
@@ -593,6 +604,19 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 待办 | `createRng(seed)` 尚未从 core 公共入口导出；服务端暂用本地 CSPRNG 适配（繁殖结果落库、不重放） |
 
 **E-09（待 A 补）**：从 `@petbattle/core` 公共入口导出 `createRng(seed: number): Rng`（内部复用 mulberry32）。导出后服务端一行替换本地适配；在此之前允许服务端用 CSPRNG 构造同接口 Rng，但必须在文档注明“繁殖结果落库、不重放”。
+
+### 11.12 B 第三批与 MVP-A 验收（2026-10-29）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 454 passed；客户端 sync-lib / typecheck 通过 |
+| 客户端 | StageSelect（解锁/编队/克制）+ Battle（本地 BattleEngine、手动/自动、claim）+ Breeding 真实接口；mock/server 同构建切换 |
+| mock 主流程 | 自动战斗 21 条指令 6 回合胜利 → 首通 120/10/3 + exp 40 → cleared；繁殖产蛋→快进→领取 |
+| server 主流程 | 编队 → start → 33 条指令 8 回合 → claim 成功；繁殖 start → 孵化后 claim 成功 |
+| Lead Postgres E2E | 登录 → 编队 → start → claim：winner 0、firstClear、120/10/3 + exp 40；繁殖 start、立即 claim EGG_NOT_READY；重启后 cleared=true、eggs=1、pets=4（3 只 + 蛋）、revision 3 |
+| MVP-A 结论 | **主循环闭环成立**：收菜/喂养 → 繁殖 → 战斗（客户端 UI + 服务端结算 + Postgres 持久化） |
+| 未覆盖 | BATTLE_EXPIRED/VALIDATION_FAILED 的运行时回归；独立编队页；列表虚拟化；PvP/排行/好友/微信登录 |
+| 构建 | P-117/P-118；客户端构建必须带 `startScene=db://assets/scenes/Boot.scene` |
 
 ## 12. 变更记录
 
