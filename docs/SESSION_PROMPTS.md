@@ -20,7 +20,7 @@
 | A | 第五批已完成并合入（v1.5） | 暂停；M2 契约确定后做 PvP 战斗/AI 公共函数 |
 | D | 第四批已完成并合入（content 0.5.0） | 暂停；等 M2 内容/奖励需求 |
 | C | 第四批已完成并合入 | 等 M2 契约：PvP 三端点 + 排行榜 |
-| B | **第三批已完成并合入**（StageSelect/Battle、PvE/繁殖完整交互） | MVP-A 主循环闭环；下一批按 M2 契约做 PvP/排行 UI |
+| B | 第三批已完成并合入 | **第四批待做**：M1 收尾——放生 UI、本地存档、验收（§4） |
 | E | 暂停 | 美术不参与本轮 |
 
 - 可同时跑 **3~4 个**（A、D、C，加 B 装好编辑器后）；上限 4（COLLABORATION §1）。
@@ -166,45 +166,51 @@ server/src/{storage,services,routes,domain}/**、server/src/storage/migrations/0
 汇报 AGENTS.md §7，额外列出：奖励模板核对结果、AI 口径决定、仍不达标项、需要 A/C 配合的点。
 ```
 
-## 4. B —— 客户端（第三批：PvE 与繁殖完整交互）
+## 4. B —— 客户端（第四批：M1 收尾——放生 + 本地存档 + 验收）
 
-工作目录：`D:\github-mine\petbattle-client`（分支 `wt/client`）。**前置：A 第五批、C 第四批已合并**（`/battle/pve/*`、`/breeding/*` 可用，core 有 `runBattle/applyPveRewards/claimBreeding/applyProfilePatch`）。先 `git merge main`，再跑 `node client/tools/sync-lib.mjs --check`，不一致就重新生成并提交。
+工作目录：`D:\github-mine\petbattle-client`（分支 `wt/client`）。开工前先 `git merge main`（`6571236`），再跑 `node client/tools/sync-lib.mjs --check`，不一致就重新生成并提交。
 
 ```
-你继续负责 PetBattle 的 B 客户端会话，做第三批：PvE 战斗与繁殖的完整交互。按 order 一次做完。
+你继续负责 PetBattle 的 B 客户端会话，做第四批：M1 收尾。按 order 一次做完。
 
 工作目录：D:\github-mine\petbattle-client（分支 wt/client）。
-开工前先 git merge main（contract-v1.5；A/C 第五/四批已合入）；跑 node client/tools/sync-lib.mjs --check，
-不一致就 node client/tools/sync-lib.mjs 重新生成并提交。
+开工前先 git merge main（6571236）；跑 node client/tools/sync-lib.mjs --check，不一致就重新生成并提交。
 只改：client/**（assets/art、assets/audio 除外）。
 不要改：packages/**、server/**、tools/**、根配置、docs/CONTRACT.md。
 
-先读：docs/CONTRACT.md §4.3/§7.4（PvE E-01~E-08、繁殖领取 E-07）、
-docs/ONLINE_DESIGN.md §16、packages/core/src/api.ts（runBattle/applyPveRewards/claimBreeding/applyProfilePatch）、
-packages/protocol/src/{battle,breeding}.ts。
+先读：docs/CONTRACT.md §4.3（release / habitat move）、docs/DOMAIN_MODEL.md §8.6（放生规则）、
+client/assets/scripts/{app,services,platform,dev}/**、packages/protocol/src/{pets,habitat}.ts。
 
 任务：
-1. StageSelect + Battle 场景：
-   - 进入关卡前调 POST /battle/pve/start；展示敌方与相性/克制；
-   - 用 @petbattle/core 的 BattleEngine 在本地演出并按玩家选择收集指令；
-     自动战斗用 engine.autoCommand；完整 commands 按顺序保存；
-   - 战斗结束调 POST /battle/pve/claim 提交 { battleId, commands }；
-     用 core applyProfilePatch 应用返回 patch；展示 rewards/winner；
-   - 处理 BATTLE_EXPIRED（提示重开）、VALIDATION_FAILED（重开）、409（拉全量重建）。
-2. Breeding 场景接真实接口：
-   - 预览用 checkBreeding + isInbred；POST /breeding/start；展示蛋与孵化倒计时；
-   - 蛋孵化（advanceProfile 推进后 stage != egg）可 POST /breeding/claim；
-   - 映射 EGG_NOT_READY / ALREADY_CLAIMED / 资源不足等错误码。
-3. mock 模式（DEV_CONFIG.useServer=false）用同一套 core 函数本地跑：
-   runBattle 不需要服务端；繁殖用 startBreeding/claimBreeding 操作本地 profile，保证 UI 流程一致。
-4. ApiClient 增加这两个端点；幂等键、X-Base-Revision、serverTime、409 重建继续走既有实现。
-5. 导航/store 更新；占位图与中文字体沿用首批；场景优先编辑器保存（P-113）。
-6. 验收：pnpm lint / typecheck / test；node client/tools/sync-lib.mjs --check；
-   node client/tools/typecheck.mjs；WeChat 空包可导出；mock 与 server 两种模式各跑一次主流程。
+1. 放生闭环 UI（服务端已就绪：/habitat/move、/pets/:id/release）：
+   - 在 PetDetail（或 Habitat 选中宠物）加“移出栖息地”和“放生”入口；
+   - 放生前置：在栖息地中的先调 /habitat/move 移出；蛋 / 锁定 / 上阵 / 防守 / 最后一只成年
+     分别显示不可放生原因（服务端错误码 EGG_NOT_RELEASABLE / PET_LOCKED / PET_IN_USE / LAST_ADULT 本地化）；
+   - 放生二次确认，展示返还基因尘；成功后用 applyProfilePatch 或刷新 profile；
+   - ApiClient 补 releasePet（如未加），复用 Idempotency-Key / X-Base-Revision / 409 重建；
+   - 可选：PetDetail 加锁定开关，便于触发 PET_LOCKED；不做也要展示服务端返回的锁定文案。
+2. 本地存档（MVP-A 要求“本地存档 + 云存档接口预留”）：
+   - 新增 services/localSave.ts：用 platform adapter 的 getStorage/setStorage 持久化
+     { profile, revision, savedAt, schemaVersion }，key 形如 petbattle.profile.v1；
+   - mock 模式启动优先读本地，没有/版本不匹配/解析失败则回退 createMockProfile 并清理坏档；
+   - 每次写操作成功后保存；server 模式登录/同步后以服务器档覆盖本地；409 以服务器为准；
+   - 不把 token、密钥写进存档；存档只做缓存，服务器权威。
+3. 错误态回归（低成本优先）：
+   - 给 ApiClient/服务层加可测的错误映射用例，或 dev 注入开关，覆盖
+     BATTLE_EXPIRED / BATTLE_NOT_FOUND / VALIDATION_FAILED 的提示与“重开”路径；
+   - 如果 Cocos 依赖让单测成本过高，就在报告里说明，改为手动触发记录，不要硬塞。
+4. 验收（必须真跑并记录）：
+   - MVP-A 计时：新档 30 分钟内完成 收菜→喂养→繁殖→战斗；含孵化的完整切片 60 分钟内可验证
+     （允许时间快进，但记录快进口径）；
+   - mock 重启：金币/食物/基因尘、宠物、蛋、关卡 cleared 都保留；
+   - server 模式：移出→放生成功并返还；蛋/锁定/最后成年至少各触发一次拒绝提示；
+   - 根 pnpm lint / typecheck / test；node client/tools/sync-lib.mjs --check；
+     node client/tools/typecheck.mjs；WeChat 空包可导出；Cocos 构建带 startScene=Boot（P-118）。
+5. 更新 client/README.md 的本地存档与放生说明；PITFALLS 新坑按模板追加。
 
-不要做：服务端规则、领域公式、PvP/排行榜/好友 UI；不直接调 wx.*；不复制 core/protocol 类型。
+不要做：PvP/排行榜/好友 UI、服务端规则、领域公式、复制 core/protocol 类型、直接调 wx.*。
 
-汇报 AGENTS.md §7，额外列出：新增场景、真实接口联调结果、mock 与 server 的差异、仍缺的接口。
+汇报 AGENTS.md §7，额外列出：计时结果、放生/存档验证、错误态覆盖方式、仍未做项。
 ```
 
 ## 5. 启动检查清单（0 号已代做）
@@ -297,3 +303,4 @@ docs/DOMAIN_MODEL.md §8/§9。
 | v1.13 | 2026-10-29 | D 第四批合入（content 0.5.0，core AI 主口径）；C 仍在跑 |
 | v1.14 | 2026-10-29 | C 第四批合入；P-050；E-09 createRng 待办；B 第三批可开工 |
 | v1.15 | 2026-10-29 | B 第三批合入；MVP-A 主循环验收通过；下一步转 M2 契约 |
+| v1.16 | 2026-10-29 | B 第四批：M1 收尾（放生 UI、本地存档、计时验收） |
