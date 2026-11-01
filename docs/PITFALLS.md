@@ -666,6 +666,21 @@
 
 ---
 
+## 2.8 2026-11-01 M1 收尾补记
+
+### P-122 放生未领取孵化体，breeding.eggs 留下悬空 id（P-121 修复记录）
+
+- **日期**：2026-11-01
+- **发现者/会话**：B 客户端 / 0 Lead
+- **范围**：core / server / client
+- **现象**：蛋已孵化（stage 变 juvenile/adult）但未领取，仍在 `breeding.eggs`。此时放生成功，宠物已删除，但 `breeding.eggs` 仍保留该 id；客户端可能继续显示一颗幽灵蛋。
+- **原因**：`releasePet` 只清理 `pets`、栖息地槽位、`lineup`；服务端 release patch 也没有下发 `breeding` 的变化。
+- **规避**：core `releasePet` 在删除宠物时同步从 `breeding.eggs` 移除同 id；服务端 release patch 在 `breeding` 变化时下发新值；客户端用 `applyProfilePatch` 合并。DOMAIN 不变量“放生后清理干净”应把 `breeding.eggs` 也算进去（A 下次同步 DOMAIN）。
+- **验证**：core 单测覆盖“已孵化未领取 → 放生 → eggs 清空”；Postgres E2E：release 200、patch.breeding.eggs=0、profile.breeding.eggs=0、pets 3、返还 27。
+- **关联**：P-121、`packages/core/src/release.ts`、`server/src/services/profile-service.ts`、`DOMAIN_MODEL.md` §8.6/§12。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -755,3 +770,4 @@
 | v1.9 | 2026-10-30 | 追加 P-116（Cocos loose spread 把 `[...new Set]` 编译成 `[Set]`，客户端同步时改写） |
 | v1.10 | 2026-10-30 | 追加 P-117/P-118（占位底图描边被拉伸成粗边框；CLI 构建初始场景漂移） |
 | v1.11 | 2026-10-31 | 追加 P-119~P-121（放生返还入账、本地档时钟超前、悬空蛋 id 待 A/C 处理） |
+| v1.12 | 2026-11-01 | 追加 P-122（P-121 修复：放生清理 breeding.eggs，server patch 下发） |

@@ -618,6 +618,19 @@ Postgres 迁移与 docker-compose 已就绪，`pg` 已成为 `server` 的正式�
 | 未覆盖 | BATTLE_EXPIRED/VALIDATION_FAILED 的运行时回归；独立编队页；列表虚拟化；PvP/排行/好友/微信登录 |
 | 构建 | P-117/P-118；客户端构建必须带 `startScene=db://assets/scenes/Boot.scene` |
 
+### 11.13 B 第四批与 M1 验收（2026-11-01）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 455 passed；客户端 sync-lib / typecheck 通过 |
+| 放生 UI | PetDetail 支持移出/放入栖息地、锁定/解锁、放生；二次确认与返还预览；蛋/锁定/编队/防守/最后成年拒绝文案 |
+| 本地存档 | `petbattle.profile.v1`，mock 优先读本地、server 覆盖、坏档回退；P-120 时钟超前不覆盖 |
+| 错误态 | 9 个错误码文案静态校验；devFaults 注入 BATTLE_EXPIRED，运行时出现“结算失败 + 重开” |
+| 计时 | 新档主循环 250 秒（含 26 秒 Cocos 启动）；孵化用页面时钟快进 30 分钟，刷新后进度保留 |
+| P-121 修复 | core 放生清理 `breeding.eggs`；server release patch 在变化时下发 `breeding`；Postgres E2E：release 200、patch eggs 0、profile eggs 0、pets 3、返还 27 |
+| M1 结论 | **MVP-A 验收项全部闭合**：圈养/繁殖/战斗/放生/本地+云存档/计时；tag `m1` |
+| 非阻塞 | 宠物改名 UI、PET_IN_USE 的编队/防守运行时用例、列表虚拟化、正式美术、PvP/排行/好友 |
+
 ## 12. 变更记录
 
 | 版本 | 日期 | 说明 |

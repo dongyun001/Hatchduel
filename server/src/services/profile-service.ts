@@ -257,6 +257,10 @@ export class ProfileService {
             currencies,
             pets: { remove: [petId] },
             stats: released.profile.stats,
+            // 放生未领取的孵化体会清理 eggs（P-121），把新值一并下发。
+            ...(released.profile.breeding === current.breeding
+              ? {}
+              : { breeding: released.profile.breeding }),
             ...(pvp === current.pvp ? {} : { pvp }),
           },
         };

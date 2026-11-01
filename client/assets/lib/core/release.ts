@@ -85,10 +85,16 @@ export function releasePetImpl(
   const pets: Profile['pets'] = { ...profile.pets };
   delete pets[petId];
 
+  // 已孵化但未领取的个体仍在 breeding.eggs；放生后必须清理，避免悬空 id（P-121）。
+  const breeding = profile.breeding.eggs.includes(petId)
+    ? { ...profile.breeding, eggs: profile.breeding.eggs.filter((id) => id !== petId) }
+    : profile.breeding;
+
   return {
     profile: {
       ...profile,
       pets,
+      breeding,
       stats: { ...profile.stats, released: profile.stats.released + 1 },
     },
     refund,

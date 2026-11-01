@@ -64,6 +64,16 @@ describe('releasePet：五类拒绝（DOMAIN §8.6 / P-026 / P-035）', () => {
     expect(() => releasePet(profileB, 'q', T0, cfg)).toThrow(/in_habitat/);
   });
 
+  it('放生已孵化但未领取的个体时清理 breeding.eggs（P-121）', () => {
+    const pet = makePet({ id: 'p', stage: 'juvenile' });
+    const profile = makeProfile([pet, makePet({ id: 'keep', stage: 'adult' })], []);
+    profile.breeding.eggs = ['p'];
+
+    const result = releasePet(profile, 'p', T0, cfg);
+    expect(result.profile.pets['p']).toBeUndefined();
+    expect(result.profile.breeding.eggs).toEqual([]);
+  });
+
   it('最后一只成年/老年不可放生 → last_adult', () => {
     const adult = makePet({ id: 'p', stage: 'adult' });
     const profile = makeProfile([adult], []);
