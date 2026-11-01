@@ -23,8 +23,10 @@ import type {
   MovePetToHabitatRequest,
   PlayWithPetRequest,
   ProfileWriteResponse,
+  ReleasePetResponse,
   RevisionConflictDetails,
   RouteKey,
+  SetPetLockRequest,
   SetLineupRequest,
   SetLineupResponse,
   StartBreedingRequest,
@@ -172,6 +174,15 @@ export class ApiClient {
 
   movePetToHabitat(req: MovePetToHabitatRequest): Promise<ApiResponse<ProfileWriteResponse>> {
     return this.call('movePetToHabitat', req);
+  }
+
+  setPetLock(petId: string, locked: boolean): Promise<ApiResponse<ProfileWriteResponse>> {
+    const req: SetPetLockRequest = { locked };
+    return this.call('setPetLock', req, { pathParams: { id: petId } });
+  }
+
+  releasePet(petId: string): Promise<ApiResponse<ReleasePetResponse>> {
+    return this.call('releasePet', undefined, { pathParams: { id: petId } });
   }
 
   // —— 编队 / PvE / 繁殖 ——

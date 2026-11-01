@@ -1,5 +1,6 @@
 import type { BattleSetup, Profile } from '../../lib/core';
 import type { PlatformKind } from '../platform';
+import { saveLocalProfile } from '../services/localSave';
 
 /**
  * 单向数据流：UI 只读 `appStore.getState()`，动作通过 service 改 store。
@@ -93,6 +94,8 @@ class Store {
 
   setProfile(profile: Profile): void {
     this.update((prev) => ({ ...prev, profile }));
+    // 本地缓存只在 profile 变化时写；server 同步/409 也会走到这里，服务器档覆盖本地。
+    void saveLocalProfile(profile);
   }
 
   setScreen(screen: ScreenId): void {

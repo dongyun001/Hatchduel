@@ -1,6 +1,7 @@
 import { applyProfilePatch, applyPveRewards, buildPveBattleSetup, runBattle } from '../../lib/core';
 import type { BattleSetup, Command, PetInstance, PveRewards, Profile, StageConfig } from '../../lib/core';
 import { appStore } from '../app/store';
+import { takeSimulatedBattleFault } from '../dev/devFaults';
 import type { BattleSessionState } from '../app/store';
 import { getApiClient, nowMs } from './bootstrap';
 import { getConfigRepo } from './config';
@@ -145,6 +146,12 @@ export async function claimBattle(commands: readonly Command[]): Promise<BattleC
   const session = appStore.getState().battle;
   const profile = profileOrNull();
   if (!session || !profile) return { ok: false, message: '没有进行中的战斗' };
+
+  // 开发验收：本地存储注入一次性故障，验证「提示 + 重开」路径。
+  const fault = await takeSimulatedBattleFault();
+  if (fault) {
+    return { ok: false, message: `结算失败：${apiErrorText(fault)}`, restart: true };
+  }
 
   if (session.mode === 'server') {
     const api = getApiClient();
