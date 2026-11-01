@@ -44,6 +44,9 @@ node client/tools/typecheck.mjs
 # 验证 ApiClient：serverTime 偏移、409 latestProfile 重建、幂等/版本头
 pnpm exec tsx client/tools/verify-api-client.ts
 
+# 验证错误码文案（BATTLE_EXPIRED / EGG_NOT_READY / 放生拒绝等）
+pnpm exec tsx client/tools/verify-errors.ts
+
 # 重新生成占位图
 node client/tools/gen-placeholders.mjs
 
@@ -106,6 +109,17 @@ node client/tools/gen-placeholders.mjs
   - server `POST /breeding/start|claim` → `applyProfilePatch`；
   - mock `startBreeding` / `claimBreeding`；蛋到 `bornAt + hatchMs` 后调 `advanceProfile` 一次。
 - `BreedingController` 的倒计时按**客户端配置**的 hatchMs 计算；正式环境两端 contentVersion 应一致。
+- `services/petActions.ts`：放生/锁定。
+  - 放生前置：蛋 / 锁定 / 编队 / 防守 / 最后一只成年本地先提示；栖息地中的宠物由动作自动 `/habitat/move` 移出后再放生；
+  - 服务端模式仍会发一次请求，展示 `EGG_NOT_RELEASABLE` / `PET_LOCKED` / `PET_IN_USE` / `LAST_ADULT` 的权威错误；
+  - 二次确认展示预计返还基因尘（core 计算），成功后 `applyProfilePatch`；**core 只返回 refund，离线动作自行入账（P-119）**。
+- `services/localSave.ts`：本地存档缓存（key `petbattle.profile.v1`，`schemaVersion=1`，存 `{ profile, revision, savedAt }`）。
+  - 只存 profile，不存 token/密钥；
+  - mock 启动优先读本地并 `advanceProfile` 到当前时间；结构异常/schema 不符清理并新建；
+  - 时钟回拨导致推进失败时**保留原档**（P-120）；
+  - server 登录/同步/409 都会以服务器档覆盖本地；每次 `store.setProfile` 自动写回。
+- 开发故障注入：`localStorage.setItem('petbattle.simulateBattleFault', JSON.stringify('BATTLE_EXPIRED'))`，
+  下一次 PvE 结算会失败并显示「重开」；读取后自动清除（一次性）。
 
 ## mock / server 切换
 
@@ -131,7 +145,8 @@ ART_SPEC §8.3：基础尺寸色块 + 1px 描边 + 文字标签（文字用 Labe
 
 - mock：PvE 完整流程（开始→手动/自动→结算→首通奖励/关卡解锁）、繁殖（产蛋→倒计时→领取）均可跑。
 - server：已实测 guest 登录、编队保存、PvE start/claim（服务端重放 33 条指令、8 回合胜利）、繁殖 start/claim。
+- 放生已做服务端成功 + 蛋/锁定/最后成年三种拒绝；「在编队/防守」的拒绝依赖服务端，未单独构造。
 - 列表最多显示 5 只，未做 ScrollView 虚拟化。
 - 编队选择在 StageSelect 内完成（1~3 只、非蛋），服务端模式会先 `POST /lineup/set`。
-- PvP/排行榜/好友、宠物改名/锁定/放生 UI 不在本批范围。
+- PvP/排行榜/好友不在本批范围；宠物改名 UI 未做（锁定/放生已接）。
 - 中文正文使用系统字体在原生分辨率渲染，不做低分辨率像素字（P-021）。

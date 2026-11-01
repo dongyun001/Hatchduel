@@ -1,3 +1,5 @@
+import { advanceProfile } from '../../lib/core';
+import type { ConfigRepo, Profile } from '../../lib/core';
 import { appStore } from '../app/store';
 import { DEV_CONFIG } from '../dev/devConfig';
 import { createMockProfile } from '../dev/mockProfile';
@@ -5,6 +7,7 @@ import { initPlatform } from '../platform';
 import type { PlatformAdapter } from '../platform';
 import { ApiClient } from './apiClient';
 import { loadConfigRepo } from './config';
+import { loadLocalSave } from './localSave';
 
 let platform: PlatformAdapter | null = null;
 let apiClient: ApiClient | null = null;
@@ -91,7 +94,22 @@ export async function bootstrapApp(): Promise<BootstrapResult> {
     }
   }
 
-  appStore.setProfile(createMockProfile(adapter.now(), cfg));
+  const profile = await loadMockOrLocal(adapter.now(), cfg);
+  appStore.setProfile(profile);
   appStore.setRemote({ connected: false, mode: 'mock', lastSyncAt: null });
   return { platform: adapter, mode: 'mock' };
+}
+
+/** mock 模式：优先本地缓存（推进时间），没有/坏档则新建。 */
+async function loadMockOrLocal(now: number, cfg: ConfigRepo): Promise<Profile> {
+  const saved = await loadLocalSave();
+  if (saved) {
+    try {
+      return advanceProfile(saved, now, cfg).profile;
+    } catch {
+      // 本机时钟回拨等导致推进失败：保留本地档，不丢进度；后续动作会以 core 的报错为准。
+      return saved;
+    }
+  }
+  return createMockProfile(now, cfg);
 }

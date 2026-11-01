@@ -383,6 +383,39 @@
 - **验证**：构建产物 `src/settings.json` 的 `launch.launchScene` 为 `db://assets/scenes/Boot.scene`。
 - **关联**：`client/README.md` 构建命令。
 
+### P-119 `releasePet` 只返回 refund，不入账
+
+- **日期**：2026-10-31
+- **发现者/会话**：B
+- **范围**：client / core
+- **现象**：离线模式放生成功、宠物消失，但基因尘没有增加；服务端模式正常。
+- **原因**：`core.releasePet` 按契约只返回 `{ profile, refund }`，不写 `currencies`；服务端在接口层入账，客户端 mock 动作漏了这一步。
+- **规避**：离线动作在拿到 refund 后自行加进 `currencies`（`client/assets/scripts/services/petActions.ts`）；不要改 core 语义。
+- **验证**：mock 放生前后 `geneDust` 差值等于 `refund.geneDust`。
+- **关联**：`client/assets/scripts/services/petActions.ts`、`packages/core/src/release.ts`。
+
+### P-120 本地存档时间戳超前会丢档
+
+- **日期**：2026-10-31
+- **发现者/会话**：B
+- **范围**：client
+- **现象**：开发时把 `Date.now` 快进 31 分钟验证孵化，之后刷新页面：`advanceProfile` 因 `now < lastEvaluatedAt` 抛 `TimeError`，原逻辑回退新建 mock，本地进度被覆盖。
+- **原因**：时钟回拨/快进后，`advanceProfile` 拒绝倒退；启动时把异常当成坏档处理。
+- **规避**：mock 启动读取本地档后，`advanceProfile` 失败时**保留原档**（不推进也不重建）；只有结构损坏/schema 不匹配才清理。真实设备改时间同理，服务器模式以服务器时间与 revision 为准。
+- **验证**：快进后刷新，金币/宠物/蛋/关卡进度仍在；本地档 revision 不回退。
+- **关联**：`client/assets/scripts/services/bootstrap.ts`、`client/assets/scripts/services/localSave.ts`。
+
+### P-121 放生“已孵化但仍未领取”的宠物会留下悬空蛋 id
+
+- **日期**：2026-10-31
+- **发现者/会话**：B（联调中发现，待 A/C 处理）
+- **范围**：core / server
+- **现象**：服务端用短孵化配置时，蛋在放生前已变成幼年；`/pets/:id/release` 放生成功，但 `profile.breeding.eggs` 仍保留该 id，后续 claim 会 `NOT_FOUND`。
+- **原因**：`core.releasePet` 只删 `pets`，不清理 `breeding.eggs`；拒绝规则只拦 `stage === 'egg'`，不拦“仍在 eggs 列表”。
+- **规避（建议）**：A 在 `releasePet` 里同时从 `breeding.eggs` 移除该 id（或把“在 eggs 中”加入拒绝规则）；C 的 claim 对悬空 id 返回 `NOT_FOUND` 已有处理。客户端目前只能展示服务器结果。
+- **验证**：放生幼年但仍在 eggs 的宠物后，`breeding.eggs` 不包含该 id。
+- **关联**：`packages/core/src/release.ts`、`server` 繁殖领取。
+
 ---
 
 ## 2.1 2026-10-28 评审补记
@@ -721,3 +754,4 @@
 | v1.8 | 2026-10-29 | 追加 P-050（迁移盲跑重复 drop，清空 PvE 会话） |
 | v1.9 | 2026-10-30 | 追加 P-116（Cocos loose spread 把 `[...new Set]` 编译成 `[Set]`，客户端同步时改写） |
 | v1.10 | 2026-10-30 | 追加 P-117/P-118（占位底图描边被拉伸成粗边框；CLI 构建初始场景漂移） |
+| v1.11 | 2026-10-31 | 追加 P-119~P-121（放生返还入账、本地档时钟超前、悬空蛋 id 待 A/C 处理） |
