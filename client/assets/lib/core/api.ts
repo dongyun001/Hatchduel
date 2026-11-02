@@ -23,6 +23,8 @@ import { startBreedingImpl } from './breeding-start';
 import { claimBreedingImpl } from './breeding-claim';
 import { applyPveRewardsImpl } from './pve-rewards';
 import { applyProfilePatchImpl } from './profile-patch';
+import { applyPvpOutcomeImpl, buildDefenseSnapshotImpl, buildPvpBattleSetupImpl } from './pvp';
+import { createRng as createRngImpl } from './rng';
 import { BattleReplayError } from './errors';
 import { releasePetImpl } from './release';
 import {
@@ -151,6 +153,41 @@ export interface StartBreedingResult {
 }
 
 /**
+ * PvP 防守快照（contract-v1.6 F-01/F-09）。
+ *
+ * 只存 `units`（已定格的 `BattleUnitInit`），不存 `BattleSetup`：seed 每场由服务端生成。
+ * `accountId` 由服务端落库时补上，core 不返回。过期快照仍可作为对战输入。
+ */
+export interface DefenseSnapshot {
+  /** 1~3 只，顺序即出场顺序。 */
+  petIds: PetId[];
+  /** uid 固定 d0/d1/d2；`stats` 已含 deriveStats 结果。 */
+  units: BattleUnitInit[];
+  contentVersion: string;
+  createdAt: EpochMs;
+  /** createdAt + DEFENSE_SNAPSHOT_TTL_MS（24h）。 */
+  expiresAt: EpochMs;
+}
+
+/**
+ * PvP 结算输入（contract-v1.6 F-09）。`ratingAfter` 由服务端按 Elo 计算；
+ * 机器人对局 `ranked = false`，此时 `ratingAfter` 必须等于存档当前 rating。
+ */
+export interface PvpOutcome {
+  /** 攻方视角。 */
+  result: 'win' | 'loss' | 'draw';
+  /** 真人排位 = true；机器人对局 = false（rating 不变、ranked 不计数）。 */
+  ranked: boolean;
+  ratingAfter: number;
+  seasonId: string;
+}
+
+export interface PvpOutcomeResult {
+  profile: Profile;
+  patch: ProfilePatch;
+}
+
+/**
  * 应用存档增量（contract-v1.4 D-16，PITFALLS P-047）。
  *
  * - `pets/habitats`：remove 优先于 upsert；
@@ -160,6 +197,14 @@ export interface StartBreedingResult {
  */
 export function applyProfilePatch(profile: Profile, patch: ProfilePatch): Profile {
   return applyProfilePatchImpl(profile, patch);
+}
+
+/**
+ * 构造确定性随机源（contract-v1.6 F-09，关闭 E-09）：固定 `mulberry32`。
+ * 同一 seed 得到同一序列；服务端不要再自行实现一份 PRNG。
+ */
+export function createRng(seed: number): Rng {
+  return createRngImpl(seed);
 }
 
 /**
@@ -437,6 +482,47 @@ export function buildPveBattleSetup(
   seed: number,
 ): BattleSetup {
   return buildPveBattleSetupImpl(party, stage, cfg, seed);
+}
+
+/**
+ * 构建 PvP 防守快照（contract-v1.6 F-09）：把本人宠物定格为 `BattleUnitInit[]`。
+ *
+ * - `petIds` 1~3 只、不重复、存在、非蛋；失败抛 `DefenseError`（服务端映射 `INVALID_LINEUP`）；
+ * - uid 固定 `d0/d1/d2`；`stats`/`skills`/`traits`/`passiveId` 与 `buildBattleSetup` 同口径；
+ * - `expiresAt = now + DEFENSE_SNAPSHOT_TTL_MS`；纯函数，不改 `profile`。
+ */
+export function buildDefenseSnapshot(
+  profile: Profile,
+  petIds: readonly PetId[],
+  now: EpochMs,
+  cfg: ConfigRepo,
+): DefenseSnapshot {
+  return buildDefenseSnapshotImpl(profile, petIds, now, cfg);
+}
+
+/**
+ * 构建 PvP 战斗输入（contract-v1.6 F-09）：`team0` = 攻方（uid `a*`），
+ * `team1` = 防守快照（uid 重排为 `b*`）。双方都必须 1~3 只；不改入参数组。
+ */
+export function buildPvpBattleSetup(
+  attackerPets: readonly PetInstance[],
+  defenseUnits: readonly BattleUnitInit[],
+  cfg: ConfigRepo,
+  seed: number,
+): BattleSetup {
+  return buildPvpBattleSetupImpl(attackerPets, defenseUnits, cfg, seed);
+}
+
+/**
+ * 应用异步 PvP 结算（contract-v1.6 F-09）：只改 `pvp` / `stats`，不推进时间。
+ *
+ * - `ranked=true`：写入 `ratingAfter`，`pvp.ranked` 对应结果 +1；
+ * - `ranked=false`：rating 保持原值（`ratingAfter` 不等时抛错），`ranked` 不计数；
+ * - `stats.battlesWon/Lost` 按 `result` 计，平局不计；`pvp.seasonId` 写入 `outcome.seasonId`；
+ * - `patch.fromRevision = patch.toRevision = profile.revision`，`lastEvaluatedAt` 不变。
+ */
+export function applyPvpOutcome(profile: Profile, outcome: PvpOutcome): PvpOutcomeResult {
+  return applyPvpOutcomeImpl(profile, outcome);
 }
 
 /**

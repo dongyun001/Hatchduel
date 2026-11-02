@@ -40,6 +40,16 @@ export function mulberry32(seed: number): Rng {
 }
 
 /**
+ * 公共 PRNG 构造器（contract-v1.6 F-09，关闭 E-09）。
+ *
+ * 固定复用 `mulberry32`：同一 seed 得到同一序列；服务端用它对可复现的运算
+ * （战斗、繁殖的可重放场景）构造 `Rng`，不要自行实现一份。
+ */
+export function createRng(seed: number): Rng {
+  return mulberry32(seed);
+}
+
+/**
  * 近似标准正态（Irwin–Hall，12 次均匀随机求和 − 6）。
  * 每次调用固定消费 12 次 `rng()`，保证确定性。
  */

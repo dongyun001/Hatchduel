@@ -44,6 +44,11 @@ export interface PvpState {
   defense: PetId[];
   rating: number;
   seasonId: string;
+  /**
+   * 真人排位战绩（contract-v1.6 F-09）；机器人对局不计。
+   * 缺省视为 0 场，旧存档无需迁移。
+   */
+  ranked?: { wins: number; losses: number; draws: number };
 }
 
 export interface ProfileSettings {

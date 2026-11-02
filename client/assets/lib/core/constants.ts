@@ -77,6 +77,9 @@ export const HEALTH_FLOOR = 1;
 /** 出战编队最多 3 只。 */
 export const MAX_LINEUP_SIZE = 3;
 
+/** PvP 防守快照有效期 24h（contract-v1.6 F-01）；过期仍可作为对战输入，只标记 stale。 */
+export const DEFENSE_SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000;
+
 /** 初始 3 只：水龟、雷鱼、草蛙（PRD §5.5）。 */
 export const INITIAL_SPECIES_IDS = ['turtle', 'fish', 'frog'] as const;
 
