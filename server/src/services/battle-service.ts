@@ -8,21 +8,11 @@
  */
 import { randomInt, randomUUID } from 'node:crypto';
 
-import { MAX_LINEUP_SIZE } from '@petbattle/core';
-import type {
-  BattleWinner,
-  Command,
-  PetInstance,
-  Profile,
-  PveRewards,
-  StageConfig,
-} from '@petbattle/core';
-import type {
-  ClaimPveBattleResponse,
-  StartPveBattleResponse,
-} from '@petbattle/protocol';
+import type { BattleWinner, Command, Profile, PveRewards, StageConfig } from '@petbattle/core';
+import type { ClaimPveBattleResponse, StartPveBattleResponse } from '@petbattle/protocol';
 
 import type { CoreAdapter } from '../domain/core-adapter.js';
+import { partyFromLineup } from '../domain/lineup.js';
 import { AppError, revisionConflictError } from '../errors.js';
 import type { Logger } from '../logger.js';
 import type { ProfileService } from './profile-service.js';
@@ -258,30 +248,6 @@ function assertStageUnlocked(
   if (profile.stageProgress[previous.id]?.cleared !== true) {
     throw new AppError('STAGE_LOCKED', `需要先通关 ${previous.id} 才能挑战 ${stage.id}`);
   }
-}
-
-/** 出战编队 → 参战个体；校验 1~3 只、存在、非蛋、不重复（CONTRACT §7.4 E-01）。 */
-function partyFromLineup(profile: Profile): PetInstance[] {
-  const lineup = profile.lineup;
-  if (lineup.length === 0) {
-    throw new AppError('INVALID_LINEUP', '出战编队为空，请先设置编队');
-  }
-  if (lineup.length > MAX_LINEUP_SIZE) {
-    throw new AppError('INVALID_LINEUP', `出战编队最多 ${MAX_LINEUP_SIZE} 只`);
-  }
-
-  const seen = new Set<string>();
-  const party: PetInstance[] = [];
-  for (const petId of lineup) {
-    if (seen.has(petId)) throw new AppError('INVALID_LINEUP', `编队重复：${petId}`);
-    seen.add(petId);
-
-    const pet = profile.pets[petId];
-    if (pet === undefined) throw new AppError('INVALID_LINEUP', `编队引用了不存在的宠物：${petId}`);
-    if (pet.stage === 'egg') throw new AppError('INVALID_LINEUP', `蛋不能参战：${petId}`);
-    party.push(pet);
-  }
-  return party;
 }
 
 function assertSessionOwned(

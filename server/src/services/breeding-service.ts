@@ -5,13 +5,16 @@
  * - `claim`：`core.claimBreeding` 只负责把蛋从 `breeding.eggs` 出栏；
  *   `stats.hatchlings +1` 由服务端维护（E-07a，core 不处理统计）。
  *
- * 随机源：繁殖结果由服务器生成并落库、不重放，这里注入 CSPRNG（见 `domain/rng.ts`）。
+ * 随机源：core 的 `createRng(seed)`（contract-v1.6 F-09，E-09 关闭）；
+ * seed 由服务器 CSPRNG 生成，繁殖结果落库、不重放。
  */
+import { randomInt } from 'node:crypto';
+
+import { createRng } from '@petbattle/core';
 import type { PetId, PetInstance } from '@petbattle/core';
 import type { ClaimBreedingResponse, StartBreedingResponse } from '@petbattle/protocol';
 
 import type { CoreAdapter } from '../domain/core-adapter.js';
-import { createSecureRng } from '../domain/rng.js';
 import { AppError } from '../errors.js';
 import type { ProfileService } from './profile-service.js';
 
@@ -49,7 +52,7 @@ export class BreedingService {
     const { accountId, parentA, parentB, baseRevision, now } = params;
     const parentAId = requireId(parentA, 'parentA');
     const parentBId = requireId(parentB, 'parentB');
-    const rng = createSecureRng();
+    const rng = createRng(randomInt(1, 0x7fffffff));
 
     let egg: PetInstance | undefined;
     let inbred = false;
@@ -60,7 +63,12 @@ export class BreedingService {
       now,
       requestId: params.requestId,
       auditAction: 'breeding.start',
-      auditDetail: () => ({ parentA: parentAId, parentB: parentBId, eggId: egg?.id ?? null, inbred }),
+      auditDetail: () => ({
+        parentA: parentAId,
+        parentB: parentBId,
+        eggId: egg?.id ?? null,
+        inbred,
+      }),
       mutate: async (current, nowInner) => {
         const result = this.deps.core.startBreeding(current, parentAId, parentBId, nowInner, rng);
         egg = result.child;

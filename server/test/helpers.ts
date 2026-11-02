@@ -12,6 +12,7 @@ import type { ServerConfig } from '../src/config.js';
 import { silentLogger } from '../src/logger.js';
 import { startServer } from '../src/server.js';
 import { InMemoryStore } from '../src/storage/memory.js';
+import type { Store } from '../src/storage/types.js';
 import { testConfigRepo } from './fixtures.js';
 
 export const TEST_TOKEN_SECRET = 'test-secret-0123456789';
@@ -23,8 +24,17 @@ export interface TestClock {
   now(): number;
 }
 
-export interface TestHarness {
+/** 只需要 HTTP 入口的测试（协议/错误码/排行榜读取）用这个最小结构。 */
+export interface HttpHarness {
   baseUrl: string;
+}
+
+/** 需要直接读写权威存档的测试用这个。 */
+export interface StoreHarness {
+  store: Store;
+}
+
+export interface TestHarness extends HttpHarness, StoreHarness {
   store: InMemoryStore;
   clock: TestClock;
   close(): Promise<void>;
@@ -82,12 +92,15 @@ async function finish(response: Response): Promise<HttpCall> {
   return { status: response.status, headers: response.headers, body };
 }
 
-export function authHeaders(token: string, extra: Record<string, string> = {}): Record<string, string> {
+export function authHeaders(
+  token: string,
+  extra: Record<string, string> = {},
+): Record<string, string> {
   return { authorization: `Bearer ${token}`, ...extra };
 }
 
 export function post(
-  harness: TestHarness,
+  harness: HttpHarness,
   path: string,
   body: unknown,
   headers: Record<string, string> = {},
@@ -100,7 +113,7 @@ export function post(
 }
 
 export function get(
-  harness: TestHarness,
+  harness: HttpHarness,
   path: string,
   headers: Record<string, string> = {},
 ): Promise<HttpCall> {
@@ -113,11 +126,16 @@ export interface GuestLoginResult {
 }
 
 export async function guestLogin(
-  harness: TestHarness,
+  harness: HttpHarness,
   deviceId: string,
   idempotencyKey = `login-${deviceId}`,
 ): Promise<GuestLoginResult> {
-  const call = await post(harness, '/auth/guest', { deviceId }, { 'idempotency-key': idempotencyKey });
+  const call = await post(
+    harness,
+    '/auth/guest',
+    { deviceId },
+    { 'idempotency-key': idempotencyKey },
+  );
   return { call, data: call.body.data as AuthResponse };
 }
 
@@ -131,7 +149,7 @@ export function expectError(call: HttpCall, code: string): void {
 }
 
 /** 直接读取内存存储里的权威存档（测试用来断言落库结果）。 */
-export async function loadProfile(harness: TestHarness, accountId: string): Promise<Profile> {
+export async function loadProfile(harness: StoreHarness, accountId: string): Promise<Profile> {
   const profile = await harness.store.getProfile(accountId);
   if (profile === undefined) throw new Error(`存档不存在：${accountId}`);
   return profile;
@@ -142,13 +160,16 @@ export async function loadProfile(harness: TestHarness, accountId: string): Prom
  * revision 保持不变，客户端的 baseRevision 仍然有效。
  */
 export async function replaceProfile(
-  harness: TestHarness,
+  harness: StoreHarness,
   accountId: string,
   mutate: (profile: Profile) => Profile,
 ): Promise<Profile> {
   const current = await loadProfile(harness, accountId);
   const next = mutate(current);
-  const saved = await harness.store.saveProfile({ ...next, revision: current.revision }, current.revision);
+  const saved = await harness.store.saveProfile(
+    { ...next, revision: current.revision },
+    current.revision,
+  );
   if (!saved) throw new Error('测试改写存档失败');
   return next;
 }

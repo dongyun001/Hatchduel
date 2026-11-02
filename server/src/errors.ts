@@ -10,6 +10,7 @@ import {
   BreedingError,
   ConfigValidationError,
   CoreNotImplementedError,
+  DefenseError,
   ReleaseError,
   TimeError,
 } from '@petbattle/core';
@@ -80,14 +81,12 @@ const BREEDING_ERROR_MAP: Record<BreedingErrorReason, { status: number; code: Ap
 };
 
 /** `BreedingClaimError.reason` → 协议错误码（CONTRACT §7.4 E-07）。 */
-const BREEDING_CLAIM_MAP: Record<
-  BreedingClaimErrorReason,
-  { status: number; code: ApiErrorCode }
-> = {
-  not_found: { status: 404, code: 'NOT_FOUND' },
-  egg_not_ready: { status: 409, code: 'EGG_NOT_READY' },
-  already_claimed: { status: 409, code: 'ALREADY_CLAIMED' },
-};
+const BREEDING_CLAIM_MAP: Record<BreedingClaimErrorReason, { status: number; code: ApiErrorCode }> =
+  {
+    not_found: { status: 404, code: 'NOT_FOUND' },
+    egg_not_ready: { status: 409, code: 'EGG_NOT_READY' },
+    already_claimed: { status: 409, code: 'ALREADY_CLAIMED' },
+  };
 
 /**
  * 栖息地操作失败码（DOMAIN §15.7，contract-v1.3 D-12）。
@@ -166,15 +165,28 @@ export function revisionConflictError(latest: Profile, expected: number): AppErr
 
 export function mapError(error: unknown): MappedError {
   if (error instanceof AppError) {
-    return { status: error.status, code: error.code, message: error.message, details: error.details };
+    return {
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    };
   }
 
   if (error instanceof CoreNotImplementedError) {
-    return { status: STATUS_BY_CODE.NOT_IMPLEMENTED, code: 'NOT_IMPLEMENTED', message: error.message };
+    return {
+      status: STATUS_BY_CODE.NOT_IMPLEMENTED,
+      code: 'NOT_IMPLEMENTED',
+      message: error.message,
+    };
   }
 
   if (error instanceof TimeError) {
-    return { status: STATUS_BY_CODE.TIME_BACKWARDS, code: 'TIME_BACKWARDS', message: error.message };
+    return {
+      status: STATUS_BY_CODE.TIME_BACKWARDS,
+      code: 'TIME_BACKWARDS',
+      message: error.message,
+    };
   }
 
   if (error instanceof ReleaseError) {
@@ -190,6 +202,15 @@ export function mapError(error: unknown): MappedError {
   if (error instanceof BreedingClaimError) {
     const mapped = BREEDING_CLAIM_MAP[error.reason];
     return { status: mapped.status, code: mapped.code, message: error.message };
+  }
+
+  if (error instanceof DefenseError) {
+    // F-01/F-09：防守阵容校验失败（数量/重复/不存在/蛋）统一映射 INVALID_LINEUP。
+    return {
+      status: STATUS_BY_CODE.INVALID_LINEUP,
+      code: 'INVALID_LINEUP',
+      message: `防守阵容不合法：${error.reason}`,
+    };
   }
 
   if (error instanceof BattleReplayError) {

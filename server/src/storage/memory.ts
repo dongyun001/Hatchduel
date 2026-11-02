@@ -15,6 +15,8 @@ import type {
   AccountRecord,
   AuditEntry,
   BattleSessionRecord,
+  PvpDefenseRecord,
+  PvpReplayRecord,
   SessionRecord,
   Store,
   StoredResponse,
@@ -34,12 +36,19 @@ function idempotencyKey(scope: string, key: string): string {
   return `${scope}\u0000${key}`;
 }
 
+function dailyKey(accountId: string, dayKey: string): string {
+  return `${accountId}\u0000${dayKey}`;
+}
+
 export class InMemoryStore implements Store {
   private readonly accounts = new Map<string, AccountRecord>();
   private readonly bindings = new Map<string, string>();
   private readonly profiles = new Map<string, Profile>();
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly battleSessions = new Map<string, BattleSessionRecord>();
+  private readonly pvpDefenses = new Map<string, PvpDefenseRecord>();
+  private readonly pvpReplays = new Map<string, PvpReplayRecord>();
+  private readonly dailyCounters = new Map<string, number>();
   private readonly idempotency = new Map<string, StoredResponse>();
   private readonly audits: AuditEntry[] = [];
 
@@ -80,6 +89,10 @@ export class InMemoryStore implements Store {
     account.displayName = displayName;
   }
 
+  async listAccounts(): Promise<AccountRecord[]> {
+    return [...this.accounts.values()].map((account) => clone(account));
+  }
+
   async getProfile(accountId: string): Promise<Profile | undefined> {
     const profile = this.profiles.get(accountId);
     return profile === undefined ? undefined : clone(profile);
@@ -96,6 +109,10 @@ export class InMemoryStore implements Store {
     if (current.revision !== expectedRevision) return false;
     this.profiles.set(profile.accountId, clone(profile));
     return true;
+  }
+
+  async listProfiles(): Promise<Profile[]> {
+    return [...this.profiles.values()].map((profile) => clone(profile));
   }
 
   async createSession(session: SessionRecord): Promise<void> {
@@ -160,6 +177,62 @@ export class InMemoryStore implements Store {
     if (session === undefined || session.status !== 'started') return false;
     session.status = 'claimed';
     return true;
+  }
+
+  /**
+   * 快照 + 存档同事务语义：内存实现没有 await 中断，检查 revision 后同步写两边，
+   * 不会出现“只写一边”。Postgres 用单条 CTE 语句保证同样效果。
+   */
+  async savePvpDefenseWithProfile(
+    snapshot: PvpDefenseRecord,
+    profile: Profile,
+    expectedRevision: number,
+  ): Promise<boolean> {
+    const current = this.profiles.get(profile.accountId);
+    if (current === undefined) return false;
+    if (current.revision !== expectedRevision) return false;
+    this.profiles.set(profile.accountId, clone(profile));
+    this.pvpDefenses.set(snapshot.accountId, clone(snapshot));
+    return true;
+  }
+
+  async getPvpDefense(accountId: string): Promise<PvpDefenseRecord | undefined> {
+    const snapshot = this.pvpDefenses.get(accountId);
+    return snapshot === undefined ? undefined : clone(snapshot);
+  }
+
+  async listPvpDefenses(): Promise<PvpDefenseRecord[]> {
+    return [...this.pvpDefenses.values()].map((snapshot) => clone(snapshot));
+  }
+
+  async createPvpReplay(replay: PvpReplayRecord): Promise<void> {
+    if (this.pvpReplays.has(replay.replayId)) {
+      throw new Error(`战报已存在：${replay.replayId}`);
+    }
+    this.pvpReplays.set(replay.replayId, clone(replay));
+  }
+
+  async getPvpReplay(replayId: string): Promise<PvpReplayRecord | undefined> {
+    const replay = this.pvpReplays.get(replayId);
+    return replay === undefined ? undefined : clone(replay);
+  }
+
+  async listPvpReplaysByAttacker(accountId: string, since: number): Promise<PvpReplayRecord[]> {
+    return [...this.pvpReplays.values()]
+      .filter((replay) => replay.attackerId === accountId && replay.createdAt >= since)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((replay) => clone(replay));
+  }
+
+  async getDailyUsed(accountId: string, dayKey: string): Promise<number> {
+    return this.dailyCounters.get(dailyKey(accountId, dayKey)) ?? 0;
+  }
+
+  async incrementDailyUsed(accountId: string, dayKey: string): Promise<number> {
+    const key = dailyKey(accountId, dayKey);
+    const next = (this.dailyCounters.get(key) ?? 0) + 1;
+    this.dailyCounters.set(key, next);
+    return next;
   }
 
   async appendAudit(entry: AuditEntry): Promise<void> {
