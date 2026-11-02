@@ -25,6 +25,7 @@
 | [PITFALLS.md](./PITFALLS.md) | 踩坑记录、规避方法、领域检查清单 | 所有人 |
 | [CONTRACT.md](./CONTRACT.md) | **contract-v1 冻结内容**：protocol/core/配置接口清单、各会话接手点、变更流程 | A/B/C/D/E 与所有并行会话 |
 | [SESSION_PROMPTS.md](./SESSION_PROMPTS.md) | 并行会话启动提示词（可直接粘贴）；一次能跑几个会话、前置条件 | 并行会话 |
+| [HANDOFF_M2.md](./HANDOFF_M2.md) | M1→M2 交接：仓库/契约/缺口/M2 待定项/新 0 启动步骤与会话建议 | 新 0 号与 M2 并行会话 |
 | [AGENTS.md](../AGENTS.md) | AI 工作约定、硬性规则、验收与汇报格式 | AI/维护者 |
 
 文档冲突时以 `PRD.md` 为准，并回头修订其他文档。
