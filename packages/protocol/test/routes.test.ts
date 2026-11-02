@@ -49,6 +49,12 @@ describe('protocol contract-v1', () => {
   it('关键端点已冻结（lineup 与 pvp/defense 分离）', () => {
     expect(ROUTES.setLineup.path).toBe('/lineup/set');
     expect(ROUTES.setPvpDefense.path).toBe('/pvp/defense');
+    expect(ROUTES.getPvpDefense.method).toBe('GET');
+    expect(ROUTES.getPvpDefense.path).toBe('/pvp/defense');
+    expect(ROUTES.getPvpOpponent.path).toBe('/pvp/opponent');
+    expect(ROUTES.fightPvp.path).toBe('/pvp/fight');
+    expect(ROUTES.getPvpReplay.path).toBe('/pvp/replay/:id');
+    expect(ROUTES.getLeaderboard.path).toBe('/leaderboard');
     expect(ROUTES.startPveBattle.path).toBe('/battle/pve/start');
     expect(ROUTES.claimPveBattle.path).toBe('/battle/pve/claim');
     expect(ROUTES.getProfile.path).toBe('/profile');
@@ -60,6 +66,12 @@ describe('protocol contract-v1', () => {
   it('写操作 header 常量已冻结', () => {
     expect(IDEMPOTENCY_KEY_HEADER).toBe('Idempotency-Key');
     expect(BASE_REVISION_HEADER).toBe('X-Base-Revision');
+  });
+
+  it('contract-v1.6 PvP 错误码已冻结', () => {
+    expect(API_ERROR_CODES.DAILY_LIMIT_REACHED).toBe('DAILY_LIMIT_REACHED');
+    expect(API_ERROR_CODES.OPPONENT_UNAVAILABLE).toBe('OPPONENT_UNAVAILABLE');
+    expect(API_ERROR_CODES.REPLAY_EXPIRED).toBe('REPLAY_EXPIRED');
   });
 
   it('错误码 key 与值一致且不重复', () => {

@@ -23,8 +23,10 @@
 | [ART_SPEC.md](./ART_SPEC.md) | 资源清单、尺寸、动画、包体预算 | 美术/开发 |
 | [COLLABORATION.md](./COLLABORATION.md) | 分工、目录所有权、合并规则、会话模板 | 所有人/并行会话 |
 | [PITFALLS.md](./PITFALLS.md) | 踩坑记录、规避方法、领域检查清单 | 所有人 |
-| [CONTRACT.md](./CONTRACT.md) | **contract-v1 冻结内容**：protocol/core/配置接口清单、各会话接手点、变更流程 | A/B/C/D/E 与所有并行会话 |
-| [SESSION_PROMPTS.md](./SESSION_PROMPTS.md) | 并行会话启动提示词（可直接粘贴）；一次能跑几个会话、前置条件 | 并行会话 |
+| [CONTRACT.md](./CONTRACT.md) | **contract-v1.6 冻结内容**：protocol/core/配置接口清单、各会话接手点、变更流程、M2 PvP/排行榜口径（§7.5） | A/B/C/D/E 与所有并行会话 |
+| [SESSION_PROMPTS.md](./SESSION_PROMPTS.md) | M0/M1 并行会话启动提示词（历史） | 并行会话 |
+| [SESSION_PROMPTS_M2.md](./SESSION_PROMPTS_M2.md) | **M2 并行会话启动提示词**（A/C/B，可直接粘贴）；会话数量、节奏、合并顺序 | M2 并行会话 |
+| [UI_BACKLOG.md](./UI_BACKLOG.md) | UI 欠账：现在修 / M2 / M3；UI kit、三态、安全区、构建配置漂移 | B 与所有做界面的会话 |
 | [HANDOFF_M2.md](./HANDOFF_M2.md) | M1→M2 交接：仓库/契约/缺口/M2 待定项/新 0 启动步骤与会话建议 | 新 0 号与 M2 并行会话 |
 | [AGENTS.md](../AGENTS.md) | AI 工作约定、硬性规则、验收与汇报格式 | AI/维护者 |
 
@@ -40,12 +42,15 @@
 
 ## 当前状态
 
-- 文档版本：v1.3（新增 `docs/CONTRACT.md`，contract-v1 已冻结）。
-- M0 契约：`contract-v1` 冻结于 2026-10-28；仓库骨架、protocol/core 公共契约、配置校验、server Hello、CI 已就绪。
-- 并行（2026-10-29）：A/C/D 首批已合入 main（246 测试、Postgres 冒烟通过）；A 还差 `createPet`；B 需先在 Cocos Dashboard 安装 3.x 编辑器；美术暂停。启动提示词见 `SESSION_PROMPTS.md`。
+- 文档版本：v1.4（新增 `docs/SESSION_PROMPTS_M2.md`、`docs/UI_BACKLOG.md`，contract-v1.6）。
+- M0 契约 `contract-v1`（2026-10-28）与 M1 / MVP-A（tag `m1`）已完成；455 测试、core 覆盖率约 99%。
+- **M2 契约已冻结：contract-v1.6（2026-11-02）**，见 `docs/CONTRACT.md` §7.5：
+  防守快照/匹配/双 AI 结算/战报/段位/四榜/日报限流/机器人；协议增量已入库（`GET /pvp/defense` + 3 个错误码）。
+- M2 会话计划：A 核心、C 服务端、B 客户端三个（D 按需，E 暂停）；合并顺序 A → C → B；
+  启动提示词见 `docs/SESSION_PROMPTS_M2.md`。
 - 已定：Demo 免费、像素风、MVP 物种 5 种（龟/鱼/青蛙/猫/蛇）、宠物不死亡可放生、不做主动治疗、性别保留、简体中文、2C2G Demo 服务器、不做转生、实时房间后置、交易后做。
-- 仍待定：正式版商业模式、Steam 首发地区、交易形态、扩容阈值。
-- 下一步：B 会话创建 Cocos 工程（本机无 Cocos，`client/README.md` 已说明）；A 按 `docs/CONTRACT.md` §8.1 补齐 core 实现。
+- 仍待定：正式版商业模式、Steam 首发地区、交易形态、扩容阈值、微信/Steam 登录细节。
+- 下一步：按 `SESSION_PROMPTS_M2.md` 开 A 与 B；A 合并后开 C；M2 验收见 `CONTRACT.md` §7.5 F-10。
 
 ## 建议阅读顺序
 
@@ -65,3 +70,4 @@
 |---|---|---|
 | v1.2 | 2026-10-28 | MVP 物种收窄为 5 种；同步 README/INDEX/AGENTS 的已定决策 |
 | v1.3 | 2026-10-28 | 新增 CONTRACT.md 索引；记录 contract-v1 冻结与 M0 骨架状态 |
+| v1.4 | 2026-11-02 | contract-v1.6（M2 PvP/排行榜）；新增 SESSION_PROMPTS_M2.md、UI_BACKLOG.md；更新当前状态 |

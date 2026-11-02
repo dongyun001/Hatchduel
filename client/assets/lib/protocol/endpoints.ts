@@ -3,7 +3,7 @@
 // 修改请改源包（所有者 A/0），然后重新运行同步脚本。
 // 另：`[...new Set(x)]` 已改写为 Array.from（Cocos loose spread 兼容，P-116）。
 /**
- * 端点表与请求/响应映射（ONLINE_DESIGN §5.2，contract-v1）。
+ * 端点表与请求/响应映射（ONLINE_DESIGN §5.2，contract-v1.6）。
  *
  * 客户端/服务端都从 `ROUTES` 取路径，禁止硬编码字符串；
  * `ApiContract` 把每个路由映射到 request/response 类型，编译期保证两端一致。
@@ -35,7 +35,14 @@ import type { SetLineupRequest, SetLineupResponse } from './lineup';
 import type { RenamePetRequest, ReleasePetResponse, SetPetLockRequest } from './pets';
 import type { GetProfileResponse, RenameProfileRequest } from './profile';
 import type { ProfileWriteResponse } from './profile';
-import type { GetPvpReplayResponse, GetPvpOpponentResponse, FightPvpRequest, FightPvpResponse, SetPvpDefenseRequest } from './pvp';
+import type {
+  FightPvpRequest,
+  FightPvpResponse,
+  GetPvpDefenseResponse,
+  GetPvpOpponentResponse,
+  GetPvpReplayResponse,
+  SetPvpDefenseRequest,
+} from './pvp';
 
 export const ROUTES = {
   authWechat: { method: 'POST', path: '/auth/wechat' },
@@ -69,6 +76,7 @@ export const ROUTES = {
   setLineup: { method: 'POST', path: '/lineup/set' },
 
   setPvpDefense: { method: 'POST', path: '/pvp/defense' },
+  getPvpDefense: { method: 'GET', path: '/pvp/defense' },
   getPvpOpponent: { method: 'GET', path: '/pvp/opponent' },
   fightPvp: { method: 'POST', path: '/pvp/fight' },
   getPvpReplay: { method: 'GET', path: '/pvp/replay/:id' },
@@ -115,6 +123,7 @@ export interface ApiContract {
   setLineup: { request: SetLineupRequest; response: SetLineupResponse };
 
   setPvpDefense: { request: SetPvpDefenseRequest; response: ProfileWriteResponse };
+  getPvpDefense: { request: void; response: GetPvpDefenseResponse };
   getPvpOpponent: { request: void; response: GetPvpOpponentResponse };
   fightPvp: { request: FightPvpRequest; response: FightPvpResponse };
   getPvpReplay: { request: void; response: GetPvpReplayResponse };

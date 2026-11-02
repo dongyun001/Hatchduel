@@ -67,8 +67,8 @@ curl http://127.0.0.1:3000/health
 node client/tools/sync-lib.mjs
 node client/tools/sync-lib.mjs --check
 node client/tools/typecheck.mjs
-node client/tools/verify-errors.ts
-node client/tools/verify-api-client.ts
+pnpm exec tsx client/tools/verify-errors.ts
+pnpm exec tsx client/tools/verify-api-client.ts
 
 # Cocos 构建（exit 36 才是 CLI 的成功码；实际本次返回 0，以产物为准）
 "C:/ProgramData/cocos/editors/Creator/3.8.8/CocosCreator.exe" \

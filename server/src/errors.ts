@@ -49,6 +49,10 @@ export const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   EGG_NOT_READY: 409,
   BATTLE_FINISHED: 409,
   ALREADY_CLAIMED: 409,
+  // contract-v1.6 骨架：仅映射状态，PvP 端点由 C 实现
+  DAILY_LIMIT_REACHED: 429,
+  OPPONENT_UNAVAILABLE: 409,
+  REPLAY_EXPIRED: 410,
 };
 
 /** `ReleaseError.reason` → 协议错误码（CONTRACT §8.3）。 */

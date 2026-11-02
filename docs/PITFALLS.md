@@ -681,6 +681,32 @@
 
 ---
 
+## 2.9 2026-11-02 M2 契约补记
+
+### P-123 Cocos CLI 构建的横屏/AppID/urlCheck 不随命令参数稳定生效
+
+- **日期**：2026-11-02
+- **发现者/会话**：B（M1 真机测试），0 Lead 记录
+- **范围**：client / build
+- **现象**：CLI 传 `orientation=landscape` 不生效，`game.json` 仍是 portrait；AppID 与 `urlCheck` 只在上次构建产物里手工改过，重新构建后参数漂移。
+- **原因**：构建参数与工程 `settings/` 的优先级不一致，且没有把微信侧配置纳入版本控制/构建脚本。
+- **规避**：B 在 M2 把横屏、AppID、`urlCheck` 固定到构建脚本或模板（M2 批次任务 A2）；构建产物不作为基线；每次构建后检查 `game.json`。构建必须显式带 `startScene=db://assets/scenes/Boot.scene`（P-118）。
+- **验证**：删除 `client/build/**` 后重新构建，`game.json` 仍为横屏且 AppID/urlCheck 正确；真机预览可进 Home。
+- **关联**：`client/README.md`、`client/settings/**`、`HANDOFF_M2.md` §5.2、P-116/P-118。
+
+### P-124 Node 24 直接跑客户端校验脚本会因无扩展名 import 失败
+
+- **日期**：2026-11-02
+- **发现者/会话**：0 Lead
+- **范围**：client / tooling
+- **现象**：`node client/tools/verify-errors.ts` 报 `ERR_MODULE_NOT_FOUND`（找不到 `services/errors` 的扩展名），但脚本本身没报业务错误；退出码仍可能是 0，容易被误判为通过。
+- **原因**：Node 24 的原生 TS 类型擦除不解析无扩展名 import；脚本原本按 `tsx` 运行。
+- **规避**：校验脚本统一用 `pnpm exec tsx client/tools/verify-errors.ts` / `verify-api-client.ts`；不要把 `node xxx.ts` 写进验收命令。
+- **验证**：两条命令均以 0 退出并打印 PASS；`node` 直跑的错误不被当作通过。
+- **关联**：`client/tools/verify-errors.ts`、`client/tools/verify-api-client.ts`、`HANDOFF_M2.md` §2.3。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -771,3 +797,4 @@
 | v1.10 | 2026-10-30 | 追加 P-117/P-118（占位底图描边被拉伸成粗边框；CLI 构建初始场景漂移） |
 | v1.11 | 2026-10-31 | 追加 P-119~P-121（放生返还入账、本地档时钟超前、悬空蛋 id 待 A/C 处理） |
 | v1.12 | 2026-11-01 | 追加 P-122（P-121 修复：放生清理 breeding.eggs，server patch 下发） |
+| v1.13 | 2026-11-02 | 追加 P-123/P-124（构建配置漂移；Node 直跑校验脚本的扩展名坑） |
