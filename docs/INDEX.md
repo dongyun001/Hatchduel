@@ -42,7 +42,7 @@
 
 ## 当前状态
 
-- 文档版本：v1.4（新增 `docs/SESSION_PROMPTS_M2.md`、`docs/UI_BACKLOG.md`，contract-v1.6）。
+- 文档版本：v1.5（A/C 已合并，B 待切真实接口；contract-v1.6）。
 - M0 契约 `contract-v1`（2026-10-28）与 M1 / MVP-A（tag `m1`）已完成。
 - **M2 契约已冻结：contract-v1.6（2026-11-02）**，见 `docs/CONTRACT.md` §7.5：
   防守快照/匹配/双 AI 结算/战报/段位/四榜/日报限流/机器人；协议增量已入库（`GET /pvp/defense` + 3 个错误码）。
@@ -72,3 +72,4 @@
 | v1.2 | 2026-10-28 | MVP 物种收窄为 5 种；同步 README/INDEX/AGENTS 的已定决策 |
 | v1.3 | 2026-10-28 | 新增 CONTRACT.md 索引；记录 contract-v1 冻结与 M0 骨架状态 |
 | v1.4 | 2026-11-02 | contract-v1.6（M2 PvP/排行榜）；新增 SESSION_PROMPTS_M2.md、UI_BACKLOG.md；更新当前状态 |
+| v1.5 | 2026-11-02 | A/C M2 批次已合并（539 测试、Postgres 全链路）；B 任务 A 预验收，待真实接口 |
