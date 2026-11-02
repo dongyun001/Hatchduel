@@ -52,6 +52,9 @@ importers:
 
   server:
     dependencies:
+      '@petbattle/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@petbattle/protocol':
         specifier: workspace:*
         version: link:../packages/protocol

@@ -10,6 +10,7 @@
     "typecheck": "tsc -p ../tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@petbattle/core": "workspace:*",
     "@petbattle/protocol": "workspace:*",
     "pg": "^8.23.1"
   },

@@ -43,14 +43,15 @@
 ## 当前状态
 
 - 文档版本：v1.4（新增 `docs/SESSION_PROMPTS_M2.md`、`docs/UI_BACKLOG.md`，contract-v1.6）。
-- M0 契约 `contract-v1`（2026-10-28）与 M1 / MVP-A（tag `m1`）已完成；455 测试、core 覆盖率约 99%。
+- M0 契约 `contract-v1`（2026-10-28）与 M1 / MVP-A（tag `m1`）已完成。
 - **M2 契约已冻结：contract-v1.6（2026-11-02）**，见 `docs/CONTRACT.md` §7.5：
   防守快照/匹配/双 AI 结算/战报/段位/四榜/日报限流/机器人；协议增量已入库（`GET /pvp/defense` + 3 个错误码）。
-- M2 会话计划：A 核心、C 服务端、B 客户端三个（D 按需，E 暂停）；合并顺序 A → C → B；
-  启动提示词见 `docs/SESSION_PROMPTS_M2.md`。
+- M2 进度：**A（core）与 C（server）已合并**（§11.15/§11.17，539 测试，Postgres 全链路通过）；
+  B 的 UI kit/构建固定/PvP mock 页面已在 `m2/b-client` 完成预验收（§11.16），等切真实接口后合并。
+- 下一步：B 任务 B（`/pvp/*`、`/leaderboard` 真实接口、两账号验收、web/微信构建与真机）；
+  然后按 A → C → B 完成合并并打 `m2` tag。启动/续跑提示词见 `docs/SESSION_PROMPTS_M2.md`。
 - 已定：Demo 免费、像素风、MVP 物种 5 种（龟/鱼/青蛙/猫/蛇）、宠物不死亡可放生、不做主动治疗、性别保留、简体中文、2C2G Demo 服务器、不做转生、实时房间后置、交易后做。
 - 仍待定：正式版商业模式、Steam 首发地区、交易形态、扩容阈值、微信/Steam 登录细节。
-- 下一步：按 `SESSION_PROMPTS_M2.md` 开 A 与 B；A 合并后开 C；M2 验收见 `CONTRACT.md` §7.5 F-10。
 
 ## 建议阅读顺序
 

@@ -19,7 +19,7 @@
 | 契约 | 位置 | 状态 |
 |---|---|---|
 | 传输协议 v1 | `packages/protocol/src/**` | 冻结；`PROTOCOL_VERSION = 'v1'` |
-| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；contract-v1.5 及以前全部实现。contract-v1.6 新增的 `createRng` / 防守快照 / PvP 结算辅助为 **M2 待实现**（§7.5 F-09） |
+| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；contract-v1.5 及以前全部实现。contract-v1.6 的 `createRng` / 防守快照 / PvP 结算辅助已由 A M2 批次实现（§11.15） |
 | 配置 schema | `packages/core/src/config/schema.ts` + `config/types.ts` | 冻结校验规则；数据由 D 填 |
 | 配置数据样例 | `packages/core/src/config/data/*.json` | 初版样例，**不调平衡**，待 sim |
 | 错误码 | `packages/protocol/src/errors.ts` | 冻结；只增不改 |
@@ -63,13 +63,17 @@
 ### 2.3 CI 与客户端构建
 
 CI 只跑 Node 侧（install / typecheck / test / lint / validate / health / client lib sync），
-**不跑 Cocos 构建**（CI 无编辑器）。客户端合并前由 B 本地构建，命令必须显式带初始场景：
+**不跑 Cocos 构建**（CI 无编辑器）。客户端合并前由 B 本地构建，统一走构建脚本：
 
 ```
-startScene=db://assets/scenes/Boot.scene
+node client/tools/build.mjs --platform=wechatgame --debug
+node client/tools/build.mjs --platform=web-mobile --debug
 ```
 
-否则新增 Battle 场景后 CLI 默认启动场景会漂移（PITFALLS P-118）。
+- 脚本固定 `startScene` 为 Boot 场景 **uuid** `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`，
+  并在构建后断言产物 `launchScene` 是 Boot。Cocos 3.8.8 CLI **不认** `db://assets/scenes/Boot.scene`
+  写法（会回退到场景列表第一个），所以不要再用字面 `db://` 参数（P-118 / P-125）。
+- 微信横屏、AppID、`urlCheck` 由 `client/build-templates/wechatgame/**` + 构建后处理固定（P-123）。
 
 
 
@@ -411,7 +415,7 @@ interface PvpDefenseSnapshot {
 1. 校验：攻方 `profile.lineup` 为 1~3 只合法宠物（非蛋、存在），否则 `INVALID_LINEUP`；对手存在、非自己、有非空快照，否则 `OPPONENT_UNAVAILABLE`；当日次数未用完，否则 `DAILY_LIMIT_REACHED`。
 2. 构建：`seed` 只能由服务端 CSPRNG 生成；`setup = buildPvpBattleSetup(attackerPets, snapshot.units, cfg, seed)`（team0 = 攻方，team1 = 防守方，uid 重排为 `a*`/`b*`）。
 3. 模拟：双方都用 core `autoCommand` 逐回合出令，记录**实际执行的指令序列**；30 回合 / 600 条指令上限。
-4. 结算：真人对手按 F-04 更新双方 `pvp.rating` 与 `stats`；机器人只更新攻方 `stats`，双方 `rating` 不变。攻方响应带 `patch`；防守方在下一次 `GET /profile` 看到变化。
+4. 结算：真人对手按 F-04 更新双方 `pvp.rating` 与 `stats`；机器人只更新攻方 `stats`，双方 `rating` 不变。攻方响应带 `patch`；防守方在下一次 `GET /profile` 看到变化。调用 `applyPvpOutcome` 时，防守方的 `result` 取攻方视角的反面（`win`↔`loss`，`draw` 不变），`ranked` 与攻方一致（真人 true、机器人 false）。
 5. 落库：`pvp_replays` 保存 `setup + seed + commands + events + winner + turns + 双方结算信息 + contentVersion`，保留 **30 天**。
 6. 并发：模拟经 `Semaphore(2)`；同一账号的写经 `KeyedMutex`；双方评分更新按 `accountId` 升序加锁并 CAS 重试，避免双打丢更新（P-105）。
 7. 幂等：同一 `Idempotency-Key` 返回首次结果（含 `replayId`），不重复扣次数；不同 key = 新一场。
@@ -895,6 +899,48 @@ Postgres 迁移与 docker-compose 已就绪。其余端点仍返回 404。
 | core 待实现 | `createRng`、`buildDefenseSnapshot`、`buildPvpBattleSetup`、`applyPvpOutcome`、`PvpState.ranked?`（A 批次） |
 | 服务端骨架 | 仅 `server/src/errors.ts` 三个状态映射，保证 main 绿；PvP 端点仍 404 |
 | 后续 | A → C → B 三批；D 在机器人模板/赛季配置需要时再开；E 暂停 |
+
+### 11.15 A M2 批次集成（2026-11-02）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 480 passed（37 文件，本批 +24）；core 行 99.26% / 分支 94.44% / 函数 100% |
+| createRng | 从公共入口导出，复用 `mulberry32`；E-09 在 core 侧关闭，服务端适配待 C 删除 |
+| PvpState.ranked | 可选 `{ wins, losses, draws }`；旧档无需迁移；patch 深拷贝避免共享引用 |
+| buildDefenseSnapshot | 校验顺序 数量→重复→存在→非蛋；uid `d0/d1/d2`；24h TTL；属性/技能/特质/被动与 `buildBattleSetup` 同口径 |
+| buildPvpBattleSetup | team0 `a*`、team1 重排 `b*`；空队/超限抛错；不改入参数组 |
+| applyPvpOutcome | 胜/负/平/机器人；`stats` 同口径；patch revision 不前移、时间不动；Elo 未进 core |
+| 确定性 | 同一 `(attackerPets, snapshot.units, seed)` 双跑事件流与指纹一致 |
+| 客户端同步 | `sync-lib` 重新生成 7 个 core 文件；客户端 typecheck、verify-errors、verify-api-client 通过 |
+| 接线口径 | 防守方调用 `applyPvpOutcome` 时 `result` 取反（win↔loss，draw 不变）；已写入 §7.5 F-03 |
+| 遗留 | ~~C 删除 `server/src/domain/rng.ts` 的临时 CSPRNG 适配~~ 已在 §11.17 完成；快照与 profile 同事务已实现 |
+
+### 11.17 C M2 批次集成（2026-11-02）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 539 passed（45 文件）；Postgres 4 项用 `PETBATTLE_TEST_DATABASE_URL` 全跑通过 |
+| 端点 | `POST/GET /pvp/defense`、`GET /pvp/opponent`、`POST /pvp/fight`、`GET /pvp/replay/:id`、`GET /leaderboard` |
+| 存储 | `003_pvp.sql`：防守快照/战报/日报表与索引；快照与 `profile.pvp.defense` 用单条 data-modifying CTE 原子写入 |
+| 规则 | Elo K=32/24/16；防守方 result 取反；机器人不改分不计榜；日报 10 次（Asia/Shanghai）；战报 30 天；四榜口径按 F-05 |
+| 并发 | 模拟 Semaphore(2)；同账号 KeyedMutex；防守方 CAS 失败重读重试 3 次 |
+| E-09 | 删除 `server/src/domain/rng.ts`，繁殖改用 `core.createRng`；seed 仍由 CSPRNG 生成 |
+| 冒烟 | 内存模式登录→编队→防守→匹配→fight→双方读回放→双榜全 200；compose 容器内全链路 200，`schema_migrations` 001/002/003 |
+| 环境 | 宿主机 3000 的遗留 dev server（PID 58576，根仓库 `tsx src/main.ts`）已由 0 号停止；`petbattle-db-1` 测试库留在 127.0.0.1:5433 |
+| 已知 | 回放无后台清理（靠 expiresAt）；换季只做 rating 软重置、不清日报/ranked（M2 不切季）；跨实例并发依赖 CAS/409 |
+| 后续 | B 任务 B：切真实接口、两账号验收、构建/真机；M3 评估 Redis 榜、赛季配置外置、回放清理 |
+
+### 11.16 B 任务 A 预验收（2026-11-02，分支 `m2/b-client`，未合并）
+
+| 项 | 结果 |
+|---|---|
+| 范围 | UI kit/三态/安全区/虚拟列表/改名/编队组件；PvP 防守/对手/结果/回放/排行榜（mock）；构建脚本与微信模板 |
+| 提交 | `af19da6`（基于 `c7c0961`；尚未合并 main，等 C 完成后切真实接口） |
+| 验证 | `sync-lib --check`、`typecheck.mjs`、`verify-errors`（12 码）、`verify-api-client`（含 PvP 路由）、`verify-pvp`（防守/匹配/Elo/回放/日报/四榜）全部通过 |
+| 构建 | web-mobile 7.22MB、wechatgame 6.45MB（debug 未压缩）；`launchScene=Boot`、横屏、AppID/urlCheck 固定 |
+| 浏览冒烟 | mock 模式 Home→防守→匹配→战斗→结果→回放→排行榜全链路通过 |
+| 已知 | 真机/真实接口验收待 C；PetList 虚拟列表与改名 UI 的浏览器视觉验收被 IAB splash 卡住，任务 B 补；AppID 仍为 `touristappid`；P-125（CLI 只认 startScene uuid）已记录 |
+| 合并门禁 | mock 版不得单独合入 main；C 合并后 B 切真实接口并复验，再按 A → C → B 合并 |
 
 ## 12. 变更记录
 

@@ -9,10 +9,19 @@
  * - `revision` 取 `patch.toRevision`，`lastEvaluatedAt` 取 patch 值；不校验 `fromRevision`（调用方负责）；
  * - 不修改入参 `profile` / `patch`。
  */
-import type { CodexEntry, CodexKey, Profile, ProfilePatch } from './types/profile.js';
+import type { CodexEntry, CodexKey, Profile, ProfilePatch, PvpState } from './types/profile.js';
 
 function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** `pvp.ranked` 是可选嵌套对象，复制时保持不共享引用（contract-v1.6 F-09）。 */
+function clonePvp(pvp: PvpState): PvpState {
+  return {
+    ...pvp,
+    defense: [...pvp.defense],
+    ...(pvp.ranked !== undefined ? { ranked: { ...pvp.ranked } } : {}),
+  };
 }
 
 export function applyProfilePatchImpl(profile: Profile, patch: ProfilePatch): Profile {
@@ -64,7 +73,7 @@ export function applyProfilePatchImpl(profile: Profile, patch: ProfilePatch): Pr
     next.breeding = { eggs: [...patch.breeding.eggs], cooldowns: { ...patch.breeding.cooldowns } };
   }
   if (patch.pvp !== undefined) {
-    next.pvp = { ...patch.pvp, defense: [...patch.pvp.defense] };
+    next.pvp = clonePvp(patch.pvp);
   }
   if (patch.settings !== undefined) next.settings = { ...patch.settings };
   if (patch.stats !== undefined) next.stats = { ...patch.stats };
@@ -121,7 +130,7 @@ export function buildProfilePatch(
     patch.breeding = { eggs: [...after.breeding.eggs], cooldowns: { ...after.breeding.cooldowns } };
   }
   if (!sameJson(before.pvp, after.pvp)) {
-    patch.pvp = { ...after.pvp, defense: [...after.pvp.defense] };
+    patch.pvp = clonePvp(after.pvp);
   }
   if (!sameJson(before.settings, after.settings)) patch.settings = { ...after.settings };
   if (!sameJson(before.stats, after.stats)) patch.stats = { ...after.stats };

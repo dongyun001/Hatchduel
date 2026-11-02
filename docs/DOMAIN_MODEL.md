@@ -1166,3 +1166,54 @@ interface Profile {
 | 在 eggs 且已非蛋 | 从 eggs 移除，返回该个体（不改 stage、不改时间） |
 
 `now < lastEvaluatedAt` 抛 `TimeError`；patch 保持输入 revision；不推进时间。
+
+### 15.15 PvP 防守快照与结算辅助（contract-v1.6 F-09）
+
+> 只记录 `packages/core` 的实现口径；产品规则见 `CONTRACT.md` §7.5。
+
+**`createRng(seed: number): Rng`（关闭 E-09）**
+
+- 直接复用 `mulberry32`，不引入第二份 PRNG；同一 seed 同一序列，`chance/pick` 与内部实现逐位一致。
+- 服务端可删除 `server/src/domain/rng.ts` 的临时 `createSecureRng` 适配；需要不可重放的熵源时仍在服务端自行处理。
+
+**`buildDefenseSnapshot(profile, petIds, now, cfg) → DefenseSnapshot`**
+
+- 校验顺序固定为 **数量 → 重复 → 存在 → 非蛋**，失败抛 `DefenseError.reason`：
+  `invalid_count`（0 或 >`MAX_LINEUP_SIZE`）、`duplicate`、`pet_not_found`、`pet_is_egg`。
+- `petIds` 的顺序即出场顺序；`units[i].uid = 'd0' | 'd1' | 'd2'`，`petId` 保留防守方原 id。
+- `stats` 用 `deriveStats`、`skills` 用 `cfg.skillsFor`、`traits = [...pet.traits]`、
+  `passiveId = species.passiveId`，与 `buildBattleSetup` 同口径；锁定状态不参与校验。
+- `contentVersion = cfg.contentVersion`；`createdAt = now`；`expiresAt = now + DEFENSE_SNAPSHOT_TTL_MS`（24h）。
+- 纯函数：不写 `profile`、不写 `pets`、不推进时间；返回的 `petIds`/`stats`/`skills`/`traits` 均为新容器。
+- 快照一旦生成即定格：后续升级、改基因、放生、改配置都不回溯。
+
+**`buildPvpBattleSetup(attackerPets, defenseUnits, cfg, seed) → BattleSetup`**
+
+- `team0` 复用 `buildBattleSetup` 生成攻方（uid `a0/a1/a2`）；`team1` 由快照单位重排为 `b0/b1/b2`。
+- 双方都必须 1~`MAX_LINEUP_SIZE` 只；否则抛普通 `Error`（服务端已在入口校验，core 只做防御性检查）。
+- 不改入参数组：防守单位按字段浅复制（`stats`/`skills`/`traits` 新容器），快照里的 `d*` uid 保持不变。
+- 确定性：同一 `(attackerPets, defenseUnits, seed)` 得到同一 `BattleSetup`；配合 `BattleEngine` 逐事件可复现。
+
+**`applyPvpOutcome(profile, outcome) → { profile, patch }`**
+
+| 字段 | 行为 |
+|---|---|
+| `ranked = true` | `pvp.rating = ratingAfter`；`pvp.ranked[result] += 1`（缺省从 0 起） |
+| `ranked = false` | `pvp.rating` 保持原值；`ratingAfter !== 原值` 时抛错（不静默忽略）；`pvp.ranked` 原样保留（缺省仍缺省） |
+| `stats.battlesWon/Lost` | `win` / `loss` 各 +1；`draw` 都不计 |
+| `pvp.seasonId` | 始终写入 `outcome.seasonId`（换季由服务端读取时触发） |
+
+- `patch.fromRevision = patch.toRevision = profile.revision`，revision 由服务端统一 +1；
+  函数没有 `now` 参数，`patch.at` 取 `profile.lastEvaluatedAt`，且不改写 `lastEvaluatedAt`。
+- 纯函数：不修改入参；`pvp`、`pvp.defense`、`pvp.ranked`、`stats` 均返回新对象。
+- **Elo 不在 core**：`ratingAfter` 由服务端按 F-04 计算；机器人对局双方 rating 不变，因此 `ranked=false` 且
+  `ratingAfter` 必须等于原 rating。
+
+**给 C 的接线点（F-03）**
+
+1. `setPvpDefense`：校验通过后调用 `buildDefenseSnapshot(profile, petIds, now, cfg)`，落库时补 `accountId`；
+   快照与 `profile.pvp.defense` 的 revision CAS 必须同事务（F-01）。
+2. `fight`：`seed` 用服务端 CSPRNG 生成 → `buildPvpBattleSetup(attackerPets, snapshot.units, cfg, seed)`
+   → `BattleEngine` + `autoCommand` 跑完 → 按结果给双方各调用一次 `applyPvpOutcome`。
+3. 防守方没有响应通道，其 `applyPvpOutcome` 结果在下一次 `GET /profile` 下发。
+

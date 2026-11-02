@@ -111,8 +111,9 @@ pnpm test:coverage   # 确认 core 行覆盖率
 分支：m2/c-server（基于 A 已合并后的 main）
 开工先确认：
   git status 干净；git log -1 能看到 contract-v1.6 与 A 的批次提交；
-  node -e "import('@petbattle/core').then(m=>console.log(typeof m.createRng, typeof m.buildDefenseSnapshot, typeof m.buildPvpBattleSetup, typeof m.applyPvpOutcome))"
+  pnpm exec tsx -e "import { createRng, buildDefenseSnapshot, buildPvpBattleSetup, applyPvpOutcome } from '@petbattle/core'; console.log(typeof createRng, typeof buildDefenseSnapshot, typeof buildPvpBattleSetup, typeof applyPvpOutcome)"
   四个都必须是 function；否则停止 PvP 战斗部分，先做存储/迁移/排行榜，并在报告里写明阻塞。
+  注意：不要用 `node -e "import('@petbattle/core')"`（源码用 .js 扩展名指向 .ts，Node 直跑会 ERR_MODULE_NOT_FOUND，见 P-040）。
 
 只改：server/**（含 src/storage/migrations、server/test）、docs/ONLINE_DESIGN.md。
 不要改：packages/**、client/**、根配置/CI、docs/CONTRACT.md、AGENTS.md、docs/PRD.md。
@@ -236,7 +237,8 @@ B. C 合并后（0 号通知）：PvP 页面切真实接口、两账号验收、
 任务 B（C 合并后）：
 7. 把 PvP 页面切真实接口（保留 DEV mock 开关）；两账号跑通：防守→匹配→fight→回放→排行榜。
 8. 构建与冒烟
-   - Cocos 构建必须带 startScene=db://assets/scenes/Boot.scene（P-118）。
+   - 统一用 `node client/tools/build.mjs --platform=...`；脚本固定 Boot uuid 并断言 launchScene。
+     Cocos 3.8.8 CLI 不认 `startScene=db://assets/scenes/Boot.scene`（P-118 / P-125），不要手写。
    - web-mobile + wechatgame 构建成功；WeChat 预览/真机冒烟；记录包体。
 9. 验收脚本
    - node client/tools/sync-lib.mjs --check

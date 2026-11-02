@@ -58,6 +58,11 @@ export interface RunWriteParams {
    * 审计详情；传函数则在写入成功后求值（用于 claim 这类“结果在 mutate 里才确定”的场景）。
    */
   auditDetail?: unknown | (() => unknown);
+  /**
+   * 自定义落库（contract-v1.6 F-01）：防守快照必须与 profile 的 revision CAS 同事务。
+   * 返回 false 表示 CAS 失败；其他写操作省略此字段，走 `store.saveProfile`。
+   */
+  commit?: (profile: Profile, expectedRevision: number) => Promise<boolean>;
   mutate: (profile: Profile, now: number) => Promise<MutationOutcome>;
 }
 
@@ -246,9 +251,7 @@ export class ProfileService {
         // 防守阵容与被放生的宠物解耦：避免留下悬空 id（lineup 由 core 直接拒绝）。
         const defense = current.pvp.defense.filter((id) => id !== petId);
         const pvp =
-          defense.length === current.pvp.defense.length
-            ? current.pvp
-            : { ...current.pvp, defense };
+          defense.length === current.pvp.defense.length ? current.pvp : { ...current.pvp, defense };
 
         return {
           profile: { ...released.profile, currencies, pvp },
@@ -276,7 +279,9 @@ export class ProfileService {
     return { data, revision: profile.revision, refund };
   }
 
-  async setLineup(params: SetLineupParams): Promise<ProfileWriteResult & { data: SetLineupResponse }> {
+  async setLineup(
+    params: SetLineupParams,
+  ): Promise<ProfileWriteResult & { data: SetLineupResponse }> {
     const { accountId, petIds, baseRevision, now, requestId } = params;
 
     const { profile, patch } = await this.runWrite({
@@ -444,7 +449,10 @@ export class ProfileService {
       const nextRevision = baseRevision + 1;
       const nextProfile: Profile = { ...outcome.profile, revision: nextRevision };
 
-      const saved = await store.saveProfile(nextProfile, baseRevision);
+      const saved =
+        params.commit === undefined
+          ? await store.saveProfile(nextProfile, baseRevision)
+          : await params.commit(nextProfile, baseRevision);
       if (!saved) {
         const latest = await store.getProfile(accountId);
         if (latest === undefined) throw new AppError('NOT_FOUND', '存档不存在');
@@ -502,7 +510,9 @@ function addResources(
   delta: ResourceBag,
 ): Record<ResourceId, number> {
   const next: Record<ResourceId, number> = { ...base };
-  for (const [resource, amount] of Object.entries(delta) as Array<[ResourceId, number | undefined]>) {
+  for (const [resource, amount] of Object.entries(delta) as Array<
+    [ResourceId, number | undefined]
+  >) {
     if (amount === undefined) continue;
     next[resource] = (next[resource] ?? 0) + amount;
   }

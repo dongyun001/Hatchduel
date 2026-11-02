@@ -5,9 +5,11 @@ import { registerAuthRoutes } from './auth.routes.js';
 import { registerBattleRoutes } from './battle.routes.js';
 import { registerBreedingRoutes } from './breeding.routes.js';
 import { registerHabitatRoutes } from './habitat.routes.js';
+import { registerLeaderboardRoutes } from './leaderboard.routes.js';
 import { registerLineupRoutes } from './lineup.routes.js';
 import { registerPetRoutes } from './pets.routes.js';
 import { registerProfileRoutes } from './profile.routes.js';
+import { registerPvpRoutes } from './pvp.routes.js';
 
 export function registerRoutes(router: Router<RouteHandler>, deps: ServerDeps): void {
   registerAuthRoutes(router, deps);
@@ -17,4 +19,6 @@ export function registerRoutes(router: Router<RouteHandler>, deps: ServerDeps): 
   registerHabitatRoutes(router, deps);
   registerBattleRoutes(router, deps);
   registerBreedingRoutes(router, deps);
+  registerPvpRoutes(router, deps);
+  registerLeaderboardRoutes(router, deps);
 }

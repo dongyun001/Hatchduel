@@ -7,7 +7,7 @@
  * 编队与 PvP 防守阵容（`profile.pvp.defense`）是两个独立系统，互不联动。
  */
 import { MAX_LINEUP_SIZE } from '@petbattle/core';
-import type { PetId, Profile } from '@petbattle/core';
+import type { PetId, PetInstance, Profile } from '@petbattle/core';
 
 import { AppError } from '../errors.js';
 
@@ -16,7 +16,10 @@ export function validateLineup(profile: Profile, input: unknown): PetId[] {
     throw new AppError('VALIDATION_FAILED', 'petIds 必须是数组');
   }
   if (input.length > MAX_LINEUP_SIZE) {
-    throw new AppError('INVALID_LINEUP', `出战编队最多 ${MAX_LINEUP_SIZE} 只，收到 ${input.length}`);
+    throw new AppError(
+      'INVALID_LINEUP',
+      `出战编队最多 ${MAX_LINEUP_SIZE} 只，收到 ${input.length}`,
+    );
   }
 
   const seen = new Set<string>();
@@ -43,4 +46,31 @@ export function validateLineup(profile: Profile, input: unknown): PetId[] {
   }
 
   return lineup;
+}
+
+/**
+ * 出战编队 → 参战个体：1~3 只、存在、非蛋、不重复（CONTRACT §7.4 E-01 / §7.5 F-03）。
+ * PvE 与 PvP 攻方共用同一口径，避免两处校验漂移。
+ */
+export function partyFromLineup(profile: Profile): PetInstance[] {
+  const lineup = profile.lineup;
+  if (lineup.length === 0) {
+    throw new AppError('INVALID_LINEUP', '出战编队为空，请先设置编队');
+  }
+  if (lineup.length > MAX_LINEUP_SIZE) {
+    throw new AppError('INVALID_LINEUP', `出战编队最多 ${MAX_LINEUP_SIZE} 只`);
+  }
+
+  const seen = new Set<string>();
+  const party: PetInstance[] = [];
+  for (const petId of lineup) {
+    if (seen.has(petId)) throw new AppError('INVALID_LINEUP', `编队重复：${petId}`);
+    seen.add(petId);
+
+    const pet = profile.pets[petId];
+    if (pet === undefined) throw new AppError('INVALID_LINEUP', `编队引用了不存在的宠物：${petId}`);
+    if (pet.stage === 'egg') throw new AppError('INVALID_LINEUP', `蛋不能参战：${petId}`);
+    party.push(pet);
+  }
+  return party;
 }
