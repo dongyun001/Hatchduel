@@ -237,7 +237,8 @@ B. C 合并后（0 号通知）：PvP 页面切真实接口、两账号验收、
 任务 B（C 合并后）：
 7. 把 PvP 页面切真实接口（保留 DEV mock 开关）；两账号跑通：防守→匹配→fight→回放→排行榜。
 8. 构建与冒烟
-   - Cocos 构建必须带 startScene=db://assets/scenes/Boot.scene（P-118）。
+   - 统一用 `node client/tools/build.mjs --platform=...`；脚本固定 Boot uuid 并断言 launchScene。
+     Cocos 3.8.8 CLI 不认 `startScene=db://assets/scenes/Boot.scene`（P-118 / P-125），不要手写。
    - web-mobile + wechatgame 构建成功；WeChat 预览/真机冒烟；记录包体。
 9. 验收脚本
    - node client/tools/sync-lib.mjs --check

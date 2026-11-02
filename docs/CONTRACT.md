@@ -63,13 +63,17 @@
 ### 2.3 CI 与客户端构建
 
 CI 只跑 Node 侧（install / typecheck / test / lint / validate / health / client lib sync），
-**不跑 Cocos 构建**（CI 无编辑器）。客户端合并前由 B 本地构建，命令必须显式带初始场景：
+**不跑 Cocos 构建**（CI 无编辑器）。客户端合并前由 B 本地构建，统一走构建脚本：
 
 ```
-startScene=db://assets/scenes/Boot.scene
+node client/tools/build.mjs --platform=wechatgame --debug
+node client/tools/build.mjs --platform=web-mobile --debug
 ```
 
-否则新增 Battle 场景后 CLI 默认启动场景会漂移（PITFALLS P-118）。
+- 脚本固定 `startScene` 为 Boot 场景 **uuid** `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`，
+  并在构建后断言产物 `launchScene` 是 Boot。Cocos 3.8.8 CLI **不认** `db://assets/scenes/Boot.scene`
+  写法（会回退到场景列表第一个），所以不要再用字面 `db://` 参数（P-118 / P-125）。
+- 微信横屏、AppID、`urlCheck` 由 `client/build-templates/wechatgame/**` + 构建后处理固定（P-123）。
 
 
 
@@ -910,6 +914,18 @@ Postgres 迁移与 docker-compose 已就绪。其余端点仍返回 404。
 | 客户端同步 | `sync-lib` 重新生成 7 个 core 文件；客户端 typecheck、verify-errors、verify-api-client 通过 |
 | 接线口径 | 防守方调用 `applyPvpOutcome` 时 `result` 取反（win↔loss，draw 不变）；已写入 §7.5 F-03 |
 | 遗留 | C 删除 `server/src/domain/rng.ts` 的临时 CSPRNG 适配；按 §7.5 F-01 做快照与 profile 同事务 |
+
+### 11.16 B 任务 A 预验收（2026-11-02，分支 `m2/b-client`，未合并）
+
+| 项 | 结果 |
+|---|---|
+| 范围 | UI kit/三态/安全区/虚拟列表/改名/编队组件；PvP 防守/对手/结果/回放/排行榜（mock）；构建脚本与微信模板 |
+| 提交 | `af19da6`（基于 `c7c0961`；尚未合并 main，等 C 完成后切真实接口） |
+| 验证 | `sync-lib --check`、`typecheck.mjs`、`verify-errors`（12 码）、`verify-api-client`（含 PvP 路由）、`verify-pvp`（防守/匹配/Elo/回放/日报/四榜）全部通过 |
+| 构建 | web-mobile 7.22MB、wechatgame 6.45MB（debug 未压缩）；`launchScene=Boot`、横屏、AppID/urlCheck 固定 |
+| 浏览冒烟 | mock 模式 Home→防守→匹配→战斗→结果→回放→排行榜全链路通过 |
+| 已知 | 真机/真实接口验收待 C；PetList 虚拟列表与改名 UI 的浏览器视觉验收被 IAB splash 卡住，任务 B 补；AppID 仍为 `touristappid`；P-125（CLI 只认 startScene uuid）已记录 |
+| 合并门禁 | mock 版不得单独合入 main；C 合并后 B 切真实接口并复验，再按 A → C → B 合并 |
 
 ## 12. 变更记录
 

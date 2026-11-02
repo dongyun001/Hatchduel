@@ -705,6 +705,17 @@
 - **验证**：两条命令均以 0 退出并打印 PASS；`node` 直跑的错误不被当作通过。
 - **关联**：`client/tools/verify-errors.ts`、`client/tools/verify-api-client.ts`、`HANDOFF_M2.md` §2.3。
 
+### P-125 Cocos 3.8.8 CLI 的 `startScene` 只认 uuid，`db://` 会被静默忽略
+
+- **日期**：2026-11-02
+- **发现者/会话**：B 客户端
+- **范围**：client / build
+- **现象**：按 P-118 传 `startScene=db://assets/scenes/Boot.scene`，CLI 不报错但启动场景回退到场景列表第一个（Battle）；产物 `src/settings.json` 的 `launchScene` 不是 Boot。
+- **原因**：3.8.8 的命令行构建参数只解析场景 uuid；`db://` 字面量不匹配任何资源，被静默忽略。
+- **规避**：构建统一用 `node client/tools/build.mjs`，脚本固定 Boot uuid `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`，并在构建后断言 `launchScene` 包含 `Boot.scene`；不要再手写 `db://` 参数。
+- **验证**：删除 `client/build/**` 后重新构建，脚本打印 `launchScene=db://assets/scenes/Boot.scene`；改回 `db://` 参数会触发脚本的 launchScene 断言失败。
+- **关联**：P-118、P-123、`client/tools/build.mjs`、`docs/CONTRACT.md` §2.3。
+
 ---
 
 ## 3. 按领域的检查清单
@@ -798,3 +809,4 @@
 | v1.11 | 2026-10-31 | 追加 P-119~P-121（放生返还入账、本地档时钟超前、悬空蛋 id 待 A/C 处理） |
 | v1.12 | 2026-11-01 | 追加 P-122（P-121 修复：放生清理 breeding.eggs，server patch 下发） |
 | v1.13 | 2026-11-02 | 追加 P-123/P-124（构建配置漂移；Node 直跑校验脚本的扩展名坑） |
+| v1.14 | 2026-11-02 | 追加 P-125（Cocos 3.8.8 CLI 只认 startScene uuid，db:// 被忽略） |
