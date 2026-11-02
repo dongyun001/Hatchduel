@@ -19,7 +19,7 @@
 | 契约 | 位置 | 状态 |
 |---|---|---|
 | 传输协议 v1 | `packages/protocol/src/**` | 冻结；`PROTOCOL_VERSION = 'v1'` |
-| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；contract-v1.5 及以前全部实现。contract-v1.6 新增的 `createRng` / 防守快照 / PvP 结算辅助为 **M2 待实现**（§7.5 F-09） |
+| 领域类型与函数签名 | `packages/core/src/index.ts`（re-export 各模块） | 冻结；contract-v1.5 及以前全部实现。contract-v1.6 的 `createRng` / 防守快照 / PvP 结算辅助已由 A M2 批次实现（§11.15） |
 | 配置 schema | `packages/core/src/config/schema.ts` + `config/types.ts` | 冻结校验规则；数据由 D 填 |
 | 配置数据样例 | `packages/core/src/config/data/*.json` | 初版样例，**不调平衡**，待 sim |
 | 错误码 | `packages/protocol/src/errors.ts` | 冻结；只增不改 |
@@ -895,6 +895,21 @@ Postgres 迁移与 docker-compose 已就绪。其余端点仍返回 404。
 | core 待实现 | `createRng`、`buildDefenseSnapshot`、`buildPvpBattleSetup`、`applyPvpOutcome`、`PvpState.ranked?`（A 批次） |
 | 服务端骨架 | 仅 `server/src/errors.ts` 三个状态映射，保证 main 绿；PvP 端点仍 404 |
 | 后续 | A → C → B 三批；D 在机器人模板/赛季配置需要时再开；E 暂停 |
+
+### 11.15 A M2 批次集成（2026-11-02）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 480 passed（37 文件，本批 +24）；core 行 99.26% / 分支 94.44% / 函数 100% |
+| createRng | 从公共入口导出，复用 `mulberry32`；E-09 在 core 侧关闭，服务端适配待 C 删除 |
+| PvpState.ranked | 可选 `{ wins, losses, draws }`；旧档无需迁移；patch 深拷贝避免共享引用 |
+| buildDefenseSnapshot | 校验顺序 数量→重复→存在→非蛋；uid `d0/d1/d2`；24h TTL；属性/技能/特质/被动与 `buildBattleSetup` 同口径 |
+| buildPvpBattleSetup | team0 `a*`、team1 重排 `b*`；空队/超限抛错；不改入参数组 |
+| applyPvpOutcome | 胜/负/平/机器人；`stats` 同口径；patch revision 不前移、时间不动；Elo 未进 core |
+| 确定性 | 同一 `(attackerPets, snapshot.units, seed)` 双跑事件流与指纹一致 |
+| 客户端同步 | `sync-lib` 重新生成 7 个 core 文件；客户端 typecheck、verify-errors、verify-api-client 通过 |
+| 接线口径 | 防守方调用 `applyPvpOutcome` 时 `result` 取反（win↔loss，draw 不变）；已写入 §7.5 F-03 |
+| 遗留 | C 删除 `server/src/domain/rng.ts` 的临时 CSPRNG 适配；按 §7.5 F-01 做快照与 profile 同事务 |
 
 ## 12. 变更记录
 
