@@ -391,6 +391,7 @@ interface PvpDefenseSnapshot {
 - 有效期 **24h**。**过期策略（二选一已定）**：过期快照仍作为对战输入，不会让不活跃玩家的防守消失；但 `GET /pvp/defense` 返回 `stale=true`，客户端提示“重新设置”。设置新快照直接替换旧快照。
 - 配置变更不回溯：快照内的 `units` 已含 `deriveStats` 结果；改配置、改基因、升级、放生都不修改旧快照。战报回放只认存储的 `setup`。
 - 防守宠物不可放生：沿用 D-11（`profile.pvp.defense` 命中 → `PET_IN_USE`）。`profile.pvp.defense` 与快照 `petIds` 必须一致。
+- 一致性：快照写入与 `profile.pvp.defense` 的 revision CAS 必须同事务（Postgres）或失败补偿（内存）；不允许只写一边。
 
 #### F-02 匹配
 
