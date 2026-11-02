@@ -31,6 +31,9 @@ const CODE_TEXT: Partial<Record<ApiErrorCode, string>> = {
   BATTLE_EXPIRED: '战斗已过期，请重开',
   ALREADY_CLAIMED: '奖励已领取',
   EGG_NOT_READY: '蛋还没孵化',
+  DAILY_LIMIT_REACHED: '今日 PvP 次数已用完（每天 10 次）',
+  OPPONENT_UNAVAILABLE: '对手不可用，请刷新后再试',
+  REPLAY_EXPIRED: '战报已过期（保留 30 天）',
 };
 
 export function apiErrorText(code: ApiErrorCode | undefined): string {

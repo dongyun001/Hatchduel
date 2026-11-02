@@ -106,6 +106,126 @@ class FakePlatform implements PlatformAdapter {
         }),
       });
     }
+    if (req.url.endsWith('/pvp/defense') && req.method === 'GET') {
+      return Promise.resolve({
+        status: 200,
+        body: JSON.stringify({
+          ok: true,
+          serverTime,
+          data: {
+            defense: {
+              petIds: [Object.keys(this.revisionProfile.pets)[0]],
+              createdAt: BASE_TIME,
+              expiresAt: BASE_TIME + 24 * 3600 * 1000,
+              stale: false,
+              contentVersion: 'test-content',
+            },
+            serverTime,
+          },
+        }),
+      });
+    }
+    if (req.url.endsWith('/pvp/opponent')) {
+      return Promise.resolve({
+        status: 200,
+        body: JSON.stringify({
+          ok: true,
+          serverTime,
+          data: {
+            opponent: {
+              accountId: 'opp-1',
+              displayName: '训练师·测试',
+              rating: 1010,
+              petCount: 2,
+              speciesPreview: ['turtle', 'fish'],
+              avgLevel: 5,
+              isBot: false,
+            },
+            challengesRemaining: 9,
+            dailyLimit: 10,
+            seasonId: 's1',
+            serverTime,
+          },
+        }),
+      });
+    }
+    if (req.url.endsWith('/pvp/fight')) {
+      return Promise.resolve({
+        status: 200,
+        body: JSON.stringify({
+          ok: true,
+          serverTime,
+          revision: 9,
+          data: {
+            patch: {
+              fromRevision: 8,
+              toRevision: 9,
+              at: BASE_TIME,
+              lastEvaluatedAt: BASE_TIME,
+              pvp: { defense: [], rating: 1016, seasonId: 's1' },
+              stats: this.revisionProfile.stats,
+            },
+            revision: 9,
+            serverTime,
+            replayId: 'replay-1',
+            result: 0,
+            turns: 7,
+            isBot: false,
+            seasonId: 's1',
+            ratingBefore: 1000,
+            ratingAfter: 1016,
+            challengesRemaining: 8,
+            opponent: {
+              accountId: 'opp-1',
+              displayName: '训练师·测试',
+              ratingBefore: 1010,
+              ratingAfter: 994,
+              isBot: false,
+            },
+          },
+        }),
+      });
+    }
+    if (req.url.includes('/pvp/replay/')) {
+      return Promise.resolve({
+        status: 200,
+        body: JSON.stringify({
+          ok: true,
+          serverTime,
+          data: {
+            replay: {
+              version: 'test-content',
+              setup: { seed: 1, teams: [[], []] },
+              seed: 1,
+              commands: [],
+              events: [],
+              winner: null,
+              turns: 0,
+            },
+            summary: {
+              replayId: 'replay-1',
+              seasonId: 's1',
+              createdAt: BASE_TIME,
+              attacker: { accountId: 'acc-1', displayName: '你', ratingBefore: 1000, ratingAfter: 1016 },
+              defender: { accountId: 'opp-1', displayName: '训练师·测试', ratingBefore: 1010, ratingAfter: 994 },
+              resultForAttacker: 0,
+              isBot: false,
+            },
+            serverTime,
+          },
+        }),
+      });
+    }
+    if (req.url.includes('/leaderboard')) {
+      return Promise.resolve({
+        status: 200,
+        body: JSON.stringify({
+          ok: true,
+          serverTime,
+          data: { kind: 'rating', seasonId: 's1', entries: [], selfEligible: false, serverTime },
+        }),
+      });
+    }
     return Promise.resolve({ status: 404, body: JSON.stringify({ ok: false, serverTime, error: { code: 'NOT_FOUND', message: 'not found' } }) });
   }
 }
@@ -159,9 +279,45 @@ async function main(): Promise<void> {
   const profileCalls = platform.calls.filter((call) => call.url.endsWith('/profile'));
   if (profileCalls.length < 1) throw new Error('没有发过 GET /profile');
 
+  // —— PvP / 排行榜路由（contract-v1.6）——
+  const defense = await client.getPvpDefense();
+  if (!defense.ok || !defense.data?.defense) throw new Error('GET /pvp/defense 失败');
+  if (defense.data.defense.stale) throw new Error('新鲜防守快照不应 stale');
+
+  const opponent = await client.getPvpOpponent();
+  if (!opponent.ok || opponent.data?.opponent.accountId !== 'opp-1') throw new Error('GET /pvp/opponent 失败');
+  if (opponent.data.challengesRemaining !== 9) throw new Error('challengesRemaining 不对');
+
+  const fight = await client.fightPvp({ opponentAccountId: 'opp-1' }, 'fixed-fight-key');
+  if (!fight.ok || fight.data?.replayId !== 'replay-1') throw new Error('POST /pvp/fight 失败');
+  if (fight.data.ratingAfter !== 1016) throw new Error('fight rating 不对');
+
+  const replay = await client.getPvpReplay('replay-1');
+  if (!replay.ok || replay.data?.summary.replayId !== 'replay-1') throw new Error('GET /pvp/replay 失败');
+
+  const board = await client.getLeaderboard({ kind: 'rating', limit: 20 });
+  if (!board.ok || board.data?.selfEligible !== false) throw new Error('GET /leaderboard 失败');
+
+  const fightCall = platform.calls.find((call) => call.url.endsWith('/pvp/fight'));
+  if (!fightCall) throw new Error('没有发出 POST /pvp/fight');
+  if (fightCall.headers['Idempotency-Key'] !== 'fixed-fight-key') {
+    throw new Error(`fight 重试未复用 Idempotency-Key：${fightCall.headers['Idempotency-Key']}`);
+  }
+  if (fightCall.headers['X-Base-Revision'] === undefined) throw new Error('fight 写操作缺 X-Base-Revision');
+
+  const replayCall = platform.calls.find((call) => call.url.includes('/pvp/replay/'));
+  if (!replayCall || !replayCall.url.endsWith('/pvp/replay/replay-1')) {
+    throw new Error(`replay 路径参数不对：${replayCall?.url ?? '(缺失)'}`);
+  }
+  const boardCall = platform.calls.find((call) => call.url.includes('/leaderboard'));
+  if (!boardCall || !boardCall.url.includes('kind=rating') || !boardCall.url.includes('limit=20')) {
+    throw new Error(`leaderboard query 不对：${boardCall?.url ?? '(缺失)'}`);
+  }
+
   console.log('PASS serverTime 偏移：', client.serverTimeOffsetMs, '（记录', offsets.join(','), '）');
   console.log('PASS 409 用 latestProfile 重建，profile revisions：', seenRevisions.join(','));
   console.log('PASS 写操作头：Idempotency-Key + X-Base-Revision=7');
+  console.log('PASS PvP 路由：/pvp/defense、/pvp/opponent、/pvp/fight、/pvp/replay/:id、/leaderboard');
 }
 
 void main().catch((error: unknown) => {

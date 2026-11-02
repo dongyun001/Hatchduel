@@ -3,19 +3,22 @@ import { appStore } from './store';
 import { gotoScene } from './navigation';
 import type { AppState, PetFilter } from './store';
 import { getConfigRepo } from '../services/config';
-import { COLORS, DESIGN, FONT_SIZE, SPRITE_SIZE } from '../ui/theme';
-import { makeButton, makeLabel, makeNode, makePanel, makeSprite, paint, place } from '../ui/nodes';
+import { createButton, createPanel, renderToast } from '../ui/kit';
+import { createEmptyState, createErrorState } from '../ui/states';
+import { COLORS, FONT_SIZE, SPRITE_SIZE } from '../ui/theme';
+import { makeLabel, makePanel, makeSprite, paint, place } from '../ui/nodes';
 import {
   createStatusRow,
   createTitle,
   elementName,
   elementTint,
   genderMark,
+  petDisplayName,
   petFrame,
-  speciesName,
   stageName,
 } from '../ui/screens';
 import { SceneView } from '../ui/sceneView';
+import { createVirtualList } from '../ui/virtualList';
 import type { PlaceholderFrames } from '../ui/placeholders';
 import type { CodexKey, ElementId, PetInstance } from '../../lib/core';
 
@@ -29,6 +32,7 @@ const FILTERS: Array<{ id: PetFilter; label: string }> = [
 ];
 
 const SELECTED_TINT = '#2f5a70';
+const ROW_HEIGHT = 132;
 const GENE_KEYS = ['hp', 'atk', 'def', 'spd'] as const;
 const GENE_NAMES: Record<(typeof GENE_KEYS)[number], string> = {
   hp: '生命',
@@ -51,12 +55,13 @@ function bestGene(pet: PetInstance): { name: string; value: number } {
 }
 
 /**
- * PetList：宠物列表 + 阶段筛选 + 四项状态 + 5×5 图鉴（未拥有显示剪影）+ 最佳基因。
- * 只读 store；点击卡片写 selectedPetId 后进详情。
+ * PetList：阶段筛选 + 虚拟化宠物列表（UI-05）+ 5×5 图鉴 + 最佳基因。
+ * 40+ 只时只实例化视口内的行；拖动滚动位置在 store 重绘之间保留。
  */
 @ccclass('PetListController')
 export class PetListController extends Component {
   private view: SceneView | null = null;
+  private listOffset = 0;
 
   start(): void {
     this.view = new SceneView(this, 'petlist-root', (root, frames, state) => this.renderScene(root, frames, state));
@@ -70,12 +75,17 @@ export class PetListController extends Component {
 
   private renderScene(root: Node, frames: PlaceholderFrames, state: Readonly<AppState>): void {
     const title = createTitle(root, '宠物列表');
-    place(title.node, 0, 480);
+    place(title.node, 0, 440);
 
     const profile = state.profile;
     if (!profile) {
-      const empty = makeLabel(root, '没有存档：请从 Boot 启动', { fontSize: FONT_SIZE.body, color: COLORS.danger });
-      place(empty.node, 0, 40);
+      const error = createErrorState(root, frames, {
+        message: '没有存档，无法显示宠物列表。请从 Boot 重新启动。',
+        retryText: '重新启动',
+        onRetry: () => gotoScene('boot'),
+      });
+      place(error, 0, 0);
+      renderToast(root, state.ui.toast, frames);
       return;
     }
 
@@ -85,99 +95,113 @@ export class PetListController extends Component {
     FILTERS.forEach((filter, index) => {
       const count = pets.filter((pet) => matchesFilter(pet, filter.id)).length;
       const active = state.ui.petFilter === filter.id;
-      const button = makeButton(
-        root,
-        `${filter.label} ${count}`,
-        200,
-        64,
-        frames.white,
-        () => appStore.setPetFilter(filter.id),
-        active ? SELECTED_TINT : COLORS.panelAlt,
-      );
-      place(button, (index - 1.5) * 220, 400);
+      const button = createButton(root, frames, {
+        text: `${filter.label} ${count}`,
+        width: 200,
+        height: 64,
+        variant: active ? 'primary' : 'secondary',
+        onClick: () => {
+          this.listOffset = 0;
+          appStore.setPetFilter(filter.id);
+        },
+      });
+      place(button, (index - 1.5) * 220, 380);
     });
 
     // —— 左侧列表 ——
-    const listPanel = makePanel(root, 920, 760);
-    paint(listPanel, frames.white, COLORS.panel);
+    const listPanel = createPanel(root, frames, 920, 760, COLORS.panel);
     place(listPanel, -450, 0);
+    const filtered = pets.filter((pet) => matchesFilter(pet, state.ui.petFilter));
 
-    const filtered = pets.filter((pet) => matchesFilter(pet, state.ui.petFilter)).slice(0, 5);
     if (filtered.length === 0) {
-      const empty = makeLabel(listPanel, '没有符合条件的宠物', { fontSize: FONT_SIZE.body, color: COLORS.textDim });
-      place(empty.node, 0, 0);
-    }
-    filtered.forEach((pet, index) => {
-      const card = this.createListCard(listPanel, pet, frames);
-      place(card.node, 0, 300 - index * 148);
-    });
-    const hidden = pets.filter((pet) => matchesFilter(pet, state.ui.petFilter)).length - filtered.length;
-    if (hidden > 0) {
-      const more = makeLabel(listPanel, `还有 ${hidden} 只未显示（列表虚拟化待做）`, {
+      const empty = createEmptyState(listPanel, frames, {
+        text: '没有符合条件的宠物',
+        actionText: '查看全部',
+        onAction: () => appStore.setPetFilter('all'),
+      });
+      place(empty, 0, 0);
+    } else {
+      const header = makeLabel(listPanel, `${filtered.length} 只 · 拖动列表滚动`, {
+        fontSize: FONT_SIZE.small,
+        color: COLORS.textDim,
+        align: 'left',
+        width: 840,
+      });
+      place(header.node, 0, 346);
+
+      const list = createVirtualList<PetInstance>(listPanel, frames, {
+        width: 860,
+        height: 640,
+        rowHeight: ROW_HEIGHT,
+        gap: 8,
+        items: filtered,
+        initialOffset: this.listOffset,
+        onOffsetChange: (offset) => {
+          this.listOffset = offset;
+        },
+        onSelect: (pet) => {
+          appStore.setSelectedPet(pet.id);
+          gotoScene('petDetail');
+        },
+        renderRow: (pet, _index, row, width) => this.renderListRow(row, width, pet, frames),
+      });
+      place(list.node, 0, -14);
+
+      const hint = makeLabel(listPanel, '点击查看八项属性、基因、特质、血统与技能', {
         fontSize: FONT_SIZE.small,
         color: COLORS.textDim,
       });
-      place(more.node, 0, -330);
+      place(hint.node, 0, -350);
     }
 
     // —— 右侧图鉴 5×5 ——
     this.renderCodex(root, frames, profile);
 
-    const back = makeButton(root, '返回主页', 360, 84, frames.white, () => gotoScene('home'));
+    const back = createButton(root, frames, {
+      text: '返回主页',
+      width: 360,
+      height: 84,
+      variant: 'secondary',
+      onClick: () => gotoScene('home'),
+    });
     place(back, 0, -450);
 
-    const hint = makeLabel(root, '点击宠物查看八项属性、基因、特质、血统与技能', {
-      fontSize: FONT_SIZE.small,
-      color: COLORS.textDim,
-    });
-    place(hint.node, 0, -510);
-
-    if (state.ui.toast) {
-      const toast = makeLabel(root, state.ui.toast, { fontSize: FONT_SIZE.body, color: COLORS.accent, width: 1500, wrap: true });
-      place(toast.node, 0, -390);
-    }
+    renderToast(root, state.ui.toast, frames);
   }
 
-  private createListCard(parent: Node, pet: PetInstance, frames: PlaceholderFrames): { node: Node } {
-    const card = makePanel(parent, 860, 132);
-    paint(card, frames.white, COLORS.panelAlt);
-    card.on(Node.EventType.TOUCH_END, () => {
-      appStore.setSelectedPet(pet.id);
-      gotoScene('petDetail');
-    });
+  private renderListRow(row: Node, width: number, pet: PetInstance, frames: PlaceholderFrames): void {
+    paint(row, frames.white, COLORS.panelAlt);
 
-    const iconSize = SPRITE_SIZE.icon48 * DESIGN.pixelScale;
-    const icon = makeSprite(card, petFrame(pet.speciesId, frames), iconSize, iconSize, elementTint(pet.elementId));
-    place(icon.node, -350, 0);
+    const iconSize = SPRITE_SIZE.icon48 * 2;
+    const icon = makeSprite(row, petFrame(pet.speciesId, frames), iconSize, iconSize, elementTint(pet.elementId));
+    place(icon.node, -width / 2 + 70, 0);
 
-    const name = makeLabel(card, `${speciesName(pet.speciesId)} ${genderMark(pet.gender)}`, {
+    const name = makeLabel(row, `${petDisplayName(pet)} ${genderMark(pet.gender)}`, {
       fontSize: FONT_SIZE.heading,
       color: COLORS.text,
       align: 'left',
-      width: 460,
+      width: 420,
     });
-    place(name.node, -30, 30);
+    place(name.node, -width / 2 + 310, 28);
 
-    const meta = makeLabel(card, `${stageName(pet.stage)} · Lv.${pet.level} · 世代 ${pet.generation}`, {
+    const meta = makeLabel(row, `${stageName(pet.stage)} · Lv.${pet.level} · 世代 ${pet.generation}`, {
       fontSize: FONT_SIZE.small,
       color: COLORS.textDim,
       align: 'left',
-      width: 460,
+      width: 420,
     });
-    place(meta.node, -30, -2);
+    place(meta.node, -width / 2 + 310, -4);
 
-    const status = createStatusRow(card, pet, frames, 320);
-    place(status, 170, -30);
+    const status = createStatusRow(row, pet, frames, 320);
+    place(status, 170, -32);
 
     const best = bestGene(pet);
-    const bestLabel = makeLabel(card, `最佳基因 ${best.name} ${best.value}`, {
+    const bestLabel = makeLabel(row, `最佳基因 ${best.name} ${best.value}`, {
       fontSize: FONT_SIZE.small,
       color: COLORS.accent,
       align: 'right',
     });
-    place(bestLabel.node, 250, 34);
-
-    return { node: card };
+    place(bestLabel.node, width / 2 - 170, 30);
   }
 
   private renderCodex(
@@ -185,8 +209,7 @@ export class PetListController extends Component {
     frames: PlaceholderFrames,
     profile: NonNullable<AppState['profile']>,
   ): void {
-    const panel = makePanel(root, 840, 760);
-    paint(panel, frames.white, COLORS.panel);
+    const panel = createPanel(root, frames, 840, 760, COLORS.panel);
     place(panel, 560, 0);
 
     const codexTitle = makeLabel(panel, '图鉴（5×5）', { fontSize: FONT_SIZE.heading, color: COLORS.text });
@@ -207,17 +230,15 @@ export class PetListController extends Component {
         const owned = Boolean(entry?.owned);
         const x = startX + col * (cell + gap);
         const y = startY - row * (cell + gap);
-        const tile = makeNode(`codex-${key}`, panel, cell, cell);
+        const tile = makePanel(panel, cell, cell);
         place(tile, x, y);
-        const bg = makePanel(tile, cell, cell);
-        paint(bg, frames.white, owned ? '#1f3644' : '#141e26');
-        place(bg, 0, 0);
+        paint(tile, frames.white, owned ? '#1f3644' : '#141e26');
 
         const icon = makeSprite(
           tile,
           owned ? petFrame(species.id, frames) : frames.silhouette,
-          SPRITE_SIZE.icon32 * DESIGN.pixelScale,
-          SPRITE_SIZE.icon32 * DESIGN.pixelScale,
+          SPRITE_SIZE.icon32 * 2,
+          SPRITE_SIZE.icon32 * 2,
           owned ? elementTint(element.id as ElementId) : '#202a33',
         );
         place(icon.node, 0, 14);

@@ -1,0 +1,18 @@
+{
+  "description": "PetBattle（宠物对决）微信小游戏",
+  "projectname": "PetBattle",
+  "appid": "touristappid",
+  "compileType": "game",
+  "libVersion": "3.4.10",
+  "setting": {
+    "urlCheck": false,
+    "es6": false,
+    "enhance": false,
+    "postcss": false,
+    "minified": false,
+    "minifyWXML": false,
+    "minifyWXSS": false,
+    "uploadWithSourceMap": true
+  },
+  "condition": {}
+}

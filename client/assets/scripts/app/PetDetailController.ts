@@ -4,13 +4,16 @@ import { gotoScene } from './navigation';
 import type { AppState } from './store';
 import { getConfigRepo } from '../services/config';
 import { movePetAction } from '../services/habitatActions';
-import { previewRelease, releasePetAction, setPetLockAction } from '../services/petActions';
+import { previewRelease, releasePetAction, renamePetAction, setPetLockAction } from '../services/petActions';
 import type { ReleasePreview } from '../services/petActions';
 import { deriveStats } from '../../lib/core';
 import type { PetInstance, Profile } from '../../lib/core';
-import { COLORS, DESIGN, FONT_SIZE } from '../ui/theme';
-import { makeButton, makeLabel, makeNode, makePanel, makeSprite, paint, place } from '../ui/nodes';
-import { createTitle, elementName, elementTint, genderMark, speciesName, stageName } from '../ui/screens';
+import { COLORS, FONT_SIZE } from '../ui/theme';
+import { createButton, renderToast, showConfirm } from '../ui/kit';
+import { createEmptyState, createErrorState } from '../ui/states';
+import { makeLabel, makeSprite, place } from '../ui/nodes';
+import { createTitle, elementName, elementTint, genderMark, petDisplayName, stageName } from '../ui/screens';
+import { showRenameDialog } from '../ui/renameDialog';
 import { SceneView } from '../ui/sceneView';
 import type { PlaceholderFrames } from '../ui/placeholders';
 
@@ -28,14 +31,15 @@ function signedPercent(value: number): string {
 }
 
 /**
- * PetDetail：八项派生属性（deriveStats）、基因、显性/隐性特质、血统、相性/克制、技能列表。
- * 所有数值来自 core / 配置，不在客户端重算公式。
+ * PetDetail：八项派生属性、基因、显性/隐性特质、血统、相性/克制、技能；
+ * 支持改名（UI-06）、移出/放入栖息地、锁定、放生（二次确认）。
  */
 @ccclass('PetDetailController')
 export class PetDetailController extends Component {
   private view: SceneView | null = null;
   /** 放生二次确认；null 表示不显示。 */
   private confirm: { petId: string; body: string } | null = null;
+  private renameOpen = false;
 
   start(): void {
     this.view = new SceneView(this, 'petdetail-root', (root, frames, state) => this.renderScene(root, frames, state));
@@ -49,17 +53,30 @@ export class PetDetailController extends Component {
 
   private renderScene(root: Node, frames: PlaceholderFrames, state: Readonly<AppState>): void {
     const title = createTitle(root, '宠物详情');
-    place(title.node, 0, 490);
+    place(title.node, 0, 440);
 
     const profile = state.profile;
     const petId = state.ui.selectedPetId;
     const pet = profile && petId ? profile.pets[petId] : undefined;
 
-    if (!profile || !pet) {
-      const empty = makeLabel(root, '没有选中的宠物', { fontSize: FONT_SIZE.body, color: COLORS.danger });
-      place(empty.node, 0, 40);
-      const back = makeButton(root, '返回列表', 360, 84, frames.white, () => gotoScene('petList'));
-      place(back, 0, -80);
+    if (!profile) {
+      const error = createErrorState(root, frames, {
+        message: '没有存档，无法显示宠物详情。',
+        retryText: '重新启动',
+        onRetry: () => gotoScene('boot'),
+      });
+      place(error, 0, 0);
+      renderToast(root, state.ui.toast, frames);
+      return;
+    }
+    if (!pet) {
+      const empty = createEmptyState(root, frames, {
+        text: '没有选中的宠物',
+        actionText: '返回列表',
+        onAction: () => gotoScene('petList'),
+      });
+      place(empty, 0, 0);
+      renderToast(root, state.ui.toast, frames);
       return;
     }
 
@@ -67,10 +84,10 @@ export class PetDetailController extends Component {
     const stats = deriveStats(pet, cfg);
     const species = cfg.species(pet.speciesId);
 
-    const portrait = makeSprite(root, frames.portrait, 256 * DESIGN.pixelScale, 256 * DESIGN.pixelScale, elementTint(pet.elementId));
+    const portrait = makeSprite(root, frames.portrait, 256 * 3, 256 * 3, elementTint(pet.elementId));
     place(portrait.node, -520, 120);
 
-    const name = makeLabel(root, `${speciesName(pet.speciesId)} ${genderMark(pet.gender)}`, {
+    const name = makeLabel(root, `${petDisplayName(pet)} ${genderMark(pet.gender)}`, {
       fontSize: 36,
       color: COLORS.text,
     });
@@ -78,16 +95,21 @@ export class PetDetailController extends Component {
 
     const meta = makeLabel(
       root,
-      `${elementName(pet.elementId)}属性 · ${stageName(pet.stage)} · Lv.${pet.level} · 世代 ${pet.generation}${pet.locked ? ' · 已锁定' : ''}`,
-      { fontSize: FONT_SIZE.body, color: COLORS.textDim },
+      `${species.name} · ${elementName(pet.elementId)}属性 · ${stageName(pet.stage)} · Lv.${pet.level} · 世代 ${pet.generation}${pet.locked ? ' · 已锁定' : ''}`,
+      { fontSize: FONT_SIZE.small, color: COLORS.textDim, width: 760, wrap: true },
     );
     place(meta.node, -520, -345);
 
-    // 放生/移出/锁定操作行
     this.renderActions(root, frames, profile, pet);
 
-    const back = makeButton(root, '返回列表', 340, 72, frames.white, () => gotoScene('petList'));
-    place(back, -520, -490);
+    const back = createButton(root, frames, {
+      text: '返回列表',
+      width: 340,
+      height: 72,
+      variant: 'secondary',
+      onClick: () => gotoScene('petList'),
+    });
+    place(back, -520, -480);
 
     // —— 右侧信息区 ——
     const statText = [
@@ -112,10 +134,36 @@ export class PetDetailController extends Component {
     });
     place(hint.node, 260, -425);
 
-    if (state.ui.toast) {
-      const toast = makeLabel(root, state.ui.toast, { fontSize: FONT_SIZE.body, color: COLORS.accent, width: 1500, wrap: true });
-      place(toast.node, 0, -505);
+    if (this.confirm && this.confirm.petId === pet.id) {
+      showConfirm(root, frames, {
+        title: '确认放生',
+        body: this.confirm.body,
+        confirmText: '确认放生',
+        danger: true,
+        onConfirm: () => void this.confirmRelease(),
+        onCancel: () => {
+          this.confirm = null;
+          this.view?.refresh();
+        },
+      });
     }
+
+    if (this.renameOpen) {
+      showRenameDialog(root, frames, {
+        initial: pet.name ?? '',
+        onConfirm: async (newName) => {
+          const result = await renamePetAction(pet.id, newName);
+          if (result.ok) appStore.setToast(result.message);
+          return result;
+        },
+        onClose: () => {
+          this.renameOpen = false;
+          this.view?.refresh();
+        },
+      });
+    }
+
+    renderToast(root, state.ui.toast, frames);
   }
 
   private renderActions(
@@ -124,66 +172,53 @@ export class PetDetailController extends Component {
     profile: Profile,
     pet: PetInstance,
   ): void {
+    const actions: Array<{ text: string; x: number; onClick: () => void; variant: 'primary' | 'secondary' | 'danger' }> = [];
+
     if (pet.stage !== 'egg') {
       const inHabitat = pet.habitatId !== null;
-      const move = makeButton(
-        root,
-        inHabitat ? '移出栖息地' : '放入栖息地',
-        220,
-        64,
-        frames.white,
-        () => void this.onToggleHabitat(profile, pet, inHabitat),
-      );
-      place(move, -680, -400);
+      actions.push({
+        text: inHabitat ? '移出栖息地' : '放入栖息地',
+        x: -700,
+        onClick: () => void this.onToggleHabitat(profile, pet, inHabitat),
+        variant: 'secondary',
+      });
     }
 
-    const lock = makeButton(root, pet.locked ? '解锁' : '锁定', 220, 64, frames.white, () => void this.onToggleLock(pet));
-    place(lock, -430, -400);
+    actions.push({
+      text: '改名',
+      x: -460,
+      onClick: () => {
+        this.renameOpen = true;
+        this.view?.refresh();
+      },
+      variant: 'secondary',
+    });
+
+    actions.push({
+      text: pet.locked ? '解锁' : '锁定',
+      x: -220,
+      onClick: () => void this.onToggleLock(pet),
+      variant: 'secondary',
+    });
 
     const preview = previewRelease(profile, pet);
-    const release = makeButton(
-      root,
-      '放生',
-      220,
-      64,
-      frames.white,
-      () => this.onReleaseClick(pet, preview),
-      preview.blocked ? COLORS.panelAlt : '#6b2b2b',
-    );
-    place(release, -180, -400);
-
-    if (this.confirm && this.confirm.petId === pet.id) this.renderConfirm(root, frames);
-  }
-
-  private renderConfirm(root: Node, frames: PlaceholderFrames): void {
-    const cover = makeNode('confirm-cover', root, DESIGN.width, DESIGN.height);
-    paint(cover, frames.white, '#05090c');
-    place(cover, 0, 0);
-
-    const panel = makePanel(cover, 900, 480);
-    paint(panel, frames.white, COLORS.panel);
-    place(panel, 0, 20);
-
-    const title = makeLabel(panel, '确认放生', { fontSize: FONT_SIZE.title, color: COLORS.danger });
-    place(title.node, 0, 160);
-
-    const body = makeLabel(panel, this.confirm?.body ?? '', {
-      fontSize: FONT_SIZE.body,
-      color: COLORS.text,
-      width: 780,
-      height: 200,
-      wrap: true,
+    actions.push({
+      text: '放生',
+      x: 20,
+      onClick: () => this.onReleaseClick(pet, preview),
+      variant: preview.blocked ? 'secondary' : 'danger',
     });
-    place(body.node, 0, 20);
 
-    const cancel = makeButton(panel, '取消', 300, 80, frames.white, () => {
-      this.confirm = null;
-      this.view?.refresh();
+    actions.forEach((action) => {
+      const button = createButton(root, frames, {
+        text: action.text,
+        width: 200,
+        height: 64,
+        variant: action.variant,
+        onClick: action.onClick,
+      });
+      place(button, action.x, -390);
     });
-    place(cancel, -190, -150);
-
-    const ok = makeButton(panel, '确认放生', 300, 80, frames.white, () => void this.confirmRelease(), '#6b2b2b');
-    place(ok, 190, -150);
   }
 
   private onReleaseClick(pet: PetInstance, preview: ReleasePreview): void {
@@ -202,7 +237,7 @@ export class PetDetailController extends Component {
     const moveText = preview.needsMoveOut ? '会先自动移出栖息地。' : '';
     this.confirm = {
       petId: pet.id,
-      body: `确定放生 ${speciesName(pet.speciesId)} Lv.${pet.level}？
+      body: `确定放生 ${petDisplayName(pet)} Lv.${pet.level}？
 ${moveText}${refundText}
 放生不可撤销，图鉴“已拥有”不会回退。`,
     };
@@ -275,7 +310,7 @@ ${moveText}${refundText}
     const cfg = getConfigRepo();
     const nameOf = (id: string): string => {
       const found = profile.pets[id];
-      return found ? cfg.species(found.speciesId).name : id;
+      return found ? petDisplayName(found) : id;
     };
     const parents = pet.parents
       .map((id) => (id ? nameOf(id) : '（无记录）'))

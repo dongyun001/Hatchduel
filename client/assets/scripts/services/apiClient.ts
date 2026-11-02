@@ -20,15 +20,24 @@ import type {
   CollectHabitatRequest,
   CollectHabitatResponse,
   FeedPetRequest,
+  FightPvpRequest,
+  FightPvpResponse,
+  GetPvpDefenseResponse,
+  GetPvpOpponentResponse,
+  GetPvpReplayResponse,
+  LeaderboardQuery,
+  LeaderboardResponse,
   MovePetToHabitatRequest,
   PlayWithPetRequest,
   ProfileWriteResponse,
   ReleasePetResponse,
+  RenamePetRequest,
   RevisionConflictDetails,
   RouteKey,
   SetPetLockRequest,
   SetLineupRequest,
   SetLineupResponse,
+  SetPvpDefenseRequest,
   StartBreedingRequest,
   StartBreedingResponse,
   StartPveBattleRequest,
@@ -183,6 +192,36 @@ export class ApiClient {
 
   releasePet(petId: string): Promise<ApiResponse<ReleasePetResponse>> {
     return this.call('releasePet', undefined, { pathParams: { id: petId } });
+  }
+
+  renamePet(petId: string, name: string): Promise<ApiResponse<ProfileWriteResponse>> {
+    const req: RenamePetRequest = { name };
+    return this.call('renamePet', req, { pathParams: { id: petId } });
+  }
+
+  // —— PvP / 排行榜（contract-v1.6 §7.5）——
+  getPvpDefense(): Promise<ApiResponse<GetPvpDefenseResponse>> {
+    return this.call('getPvpDefense', undefined);
+  }
+
+  setPvpDefense(req: SetPvpDefenseRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('setPvpDefense', req);
+  }
+
+  getPvpOpponent(): Promise<ApiResponse<GetPvpOpponentResponse>> {
+    return this.call('getPvpOpponent', undefined);
+  }
+
+  fightPvp(req: FightPvpRequest, idempotencyKey?: string): Promise<ApiResponse<FightPvpResponse>> {
+    return this.call('fightPvp', req, { idempotencyKey });
+  }
+
+  getPvpReplay(replayId: string): Promise<ApiResponse<GetPvpReplayResponse>> {
+    return this.call('getPvpReplay', undefined, { pathParams: { id: replayId } });
+  }
+
+  getLeaderboard(query: LeaderboardQuery): Promise<ApiResponse<LeaderboardResponse>> {
+    return this.call('getLeaderboard', query);
   }
 
   // —— 编队 / PvE / 繁殖 ——
