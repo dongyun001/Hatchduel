@@ -411,7 +411,7 @@ interface PvpDefenseSnapshot {
 1. 校验：攻方 `profile.lineup` 为 1~3 只合法宠物（非蛋、存在），否则 `INVALID_LINEUP`；对手存在、非自己、有非空快照，否则 `OPPONENT_UNAVAILABLE`；当日次数未用完，否则 `DAILY_LIMIT_REACHED`。
 2. 构建：`seed` 只能由服务端 CSPRNG 生成；`setup = buildPvpBattleSetup(attackerPets, snapshot.units, cfg, seed)`（team0 = 攻方，team1 = 防守方，uid 重排为 `a*`/`b*`）。
 3. 模拟：双方都用 core `autoCommand` 逐回合出令，记录**实际执行的指令序列**；30 回合 / 600 条指令上限。
-4. 结算：真人对手按 F-04 更新双方 `pvp.rating` 与 `stats`；机器人只更新攻方 `stats`，双方 `rating` 不变。攻方响应带 `patch`；防守方在下一次 `GET /profile` 看到变化。
+4. 结算：真人对手按 F-04 更新双方 `pvp.rating` 与 `stats`；机器人只更新攻方 `stats`，双方 `rating` 不变。攻方响应带 `patch`；防守方在下一次 `GET /profile` 看到变化。调用 `applyPvpOutcome` 时，防守方的 `result` 取攻方视角的反面（`win`↔`loss`，`draw` 不变），`ranked` 与攻方一致（真人 true、机器人 false）。
 5. 落库：`pvp_replays` 保存 `setup + seed + commands + events + winner + turns + 双方结算信息 + contentVersion`，保留 **30 天**。
 6. 并发：模拟经 `Semaphore(2)`；同一账号的写经 `KeyedMutex`；双方评分更新按 `accountId` 升序加锁并 CAS 重试，避免双打丢更新（P-105）。
 7. 幂等：同一 `Idempotency-Key` 返回首次结果（含 `replayId`），不重复扣次数；不同 key = 新一场。
