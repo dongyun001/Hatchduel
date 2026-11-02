@@ -464,9 +464,10 @@ interface ApiResponse<T> {
 
 ---
 
-## 16. M1 服务端实现记录（C 会话，2026-10-29）
+## 16. 服务端实现记录（C 会话；M1 2026-10-29 / M2 2026-11-03）
 
-本节记录 `server/**` 的一期落地方式，与 `docs/CONTRACT.md` 的契约不冲突；冲突时以 CONTRACT 为准。
+本节记录 `server/**` 的落地方式，与 `docs/CONTRACT.md` 的契约不冲突；冲突时以 CONTRACT 为准。
+M2（contract-v1.6）新增异步 PvP、回放与排行榜；参数与口径见下方 §16.6，表结构见 §16.5。
 
 ### 16.1 框架与目录
 
@@ -502,7 +503,7 @@ interface ApiResponse<T> {
 ### 16.4 core 桥接、初始档与降级
 
 - 服务端只通过 `CoreAdapter` 调领域函数（`advanceProfile` / `releasePet` / 六个栖息地操作 / `buildPveBattleSetup` / `runBattle` / `applyPveRewards` / `startBreeding` / `claimBreeding`）；业务端点不得自行改资源、宠物属性或阶段。
-- 繁殖随机源：`startBreeding` 需要注入 `Rng`，但 `@petbattle/core` 公共入口没有导出 `mulberry32`（只能在内部 `rng.ts` 用），服务端按包边界不能深引用，因此 `domain/rng.ts` 用 CSPRNG 构造同接口的 `Rng`（繁殖结果由服务器生成并落库、不重放，不需要跨端确定性）。已按 CONTRACT §9.3 建议 A 导出 `createRng(seed)`，之后替换实现即可。
+- 繁殖随机源（E-09 已关闭）：`startBreeding` 注入 core `createRng(seed)`（固定 `mulberry32`）；seed 由服务端 `node:crypto.randomInt` 生成。繁殖结果由服务器生成并落库、不重放。M1 的临时 CSPRNG 适配 `domain/rng.ts` 已删除，服务端不再自实现 PRNG。
 - 栖息地失败码来自 core 的 `Error`（`name = 'HabitatError'` + `code`，core 未导出 class，服务端按结构化特征识别），映射见 `server/src/errors.ts`：`pet_not_found → PET_NOT_FOUND(404)`、`habitat_not_found|food_not_found → NOT_FOUND(404)`、`capacity_full → CAPACITY_FULL(409)`、`insufficient_resources → INSUFFICIENT_RESOURCES(409)`、`egg_not_allowed|max_level|slot_conflict → VALIDATION_FAILED(400)`。
 - `collectHabitat` 只返回 `{ profile, patch }`（CONTRACT D-12），因此 `collected` 由服务端在调用前按同一口径快照：`stored` 的整数部分入账、小数零头留在 `stored`。若 core 以后直接返回 `collected`，服务端改成透传即可。
 - **初始档（`domain/starter-profile.ts`）**：调 `createPet` 建 3 只（水龟/雷鱼/草蛙，四项基因 50，generation 1，parents `[null,null]`，性别 male/female/male），出生时间取 `now - hatchMs - juvenileMs`，再对整档调 `advanceProfile(profile, now, cfg)`，断言全部 `adult` 且 `fertility.readyAt <= now`；栖息地 `meadow` 1 级、3 只占位 + 1 空；资源取 `economy.startingResources`；图鉴写 3 个组合、`bestGene = 50`；最终 `revision = 0`、`createdAt = lastEvaluatedAt = now`（首次登录不结算离线产出）。服务端不手写阶段阈值/衰减/产出。
@@ -515,7 +516,13 @@ interface ApiResponse<T> {
 - Postgres：账号的外部身份列各自唯一；存档整档存 `profiles.data`（jsonb），写入按 `revision` 条件更新做 CAS；幂等体用 `json`（**不是 jsonb**）保证重放逐字节一致。
 - 迁移：`server/src/storage/migrations/*.sql` 按文件名顺序执行，并由 `schema_migrations` 记录已应用版本；启动时先迁移再监听。**迁移不能每次启动盲跑**：`002_battle_sessions.sql` 含条件 `drop`（清理 001 的占位表），重跑会清掉 PvE 会话——本批实测踩到并已修复，`migrate.test.ts` 覆盖“第二次启动不再执行迁移”。
 - PvE 会话表 `battle_sessions`（002）：`battle_id` 主键、`setup` jsonb 快照、`party_pet_ids` jsonb、`expires_at`、`status(started|claimed)`；按 `(account_id, status)` 建索引，`claim` 用 `status='started'` 条件更新做 CAS。
-- 2C2G：`PG_POOL_MAX` 默认 10、硬上限 20；容器 `--max-old-space-size=1024`；异步 PvP 用 `Semaphore`（默认并发 2），M1 只留接口不接线。
+- 异步 PvP 表（003，contract-v1.6 F-01/F-03）：
+  - `pvp_defense_snapshots(account_id PK, pet_ids jsonb, units jsonb, content_version, created_at, expires_at)`：存 `BattleUnitInit[]`，不存 `BattleSetup`（seed 每场生成）；过期快照仍是合法对战输入，`GET /pvp/defense` 返回 `stale=true`。
+  - `pvp_replays(replay_id PK, attacker_id, defender_id, is_bot, season_id, content_version, setup jsonb, seed, commands jsonb, events jsonb, winner, turns, attacker/defender_rating_before/after, created_at, expires_at)`：回放以 `events` 为准；索引覆盖 `attacker_id+created_at`、`defender_id+created_at`、`season_id+created_at`、`expires_at`。
+  - `pvp_daily_counters(account_id, day_key, used, PK(account_id, day_key))`：`day_key` 为 Asia/Shanghai 日期；`incrementDailyUsed` 用 `insert ... on conflict do update ... returning` 原子累加。
+  - `profiles` 上补 `((data #>> '{pvp,seasonId}'))` + `((data #>> '{pvp,rating}')::double precision)` 表达式索引，支撑 Demo 阶段段位榜扫描。
+  - **快照与存档同事务**：`savePvpDefenseWithProfile` 在 Postgres 用单条 data-modifying CTE（`update profiles ... where revision=$` + `insert ... select from updated`）保证“profile revision CAS 成功”与“快照写入”同时生效；内存实现同样先校验 revision 再同步写两边。
+- 2C2G：`PG_POOL_MAX` 默认 10、硬上限 20；容器 `--max-old-space-size=1024`；异步 PvP 用 `Semaphore`（默认并发 2），已接入 `PvpService` 的模拟段。
 - `pg` 已是 `server` 的正式依赖（0 号在 M1 首批合并时补齐）；compose 默认 `PETBATTLE_CORE_STUB=strict`。
 
 ### 16.6 已实现端点
@@ -540,8 +547,35 @@ interface ApiResponse<T> {
 | `POST /battle/pve/claim` | `{ battleId, commands }`：从会话快照重放指令（`runBattle`），必须打完（否则 `VALIDATION_FAILED`）；`winner===0` 才发奖，平局按失败；返回 `{ patch, winner, rewards }`。会话不存在 `BATTLE_NOT_FOUND`、过期 `BATTLE_EXPIRED`、不同幂等键重复领取 `ALREADY_CLAIMED` |
 | `POST /breeding/start` | `{ parentA, parentB }`：调 `core.startBreeding`（校验/扣费/遗传/冷却）；返回 `{ egg, inbred, patch }`。错误映射见下 |
 | `POST /breeding/claim` | `{ eggId }`：调 `core.claimBreeding`，成功时服务端把 `stats.hatchlings +1`；返回 `{ pet, patch }` |
+| `POST /pvp/defense` | `{ petIds }`（1~3、不重复、存在、非蛋）：`core.buildDefenseSnapshot` 定格 `BattleUnitInit[]`，快照与 `profile.pvp.defense` 同事务写入；返回 `ProfileWriteResponse`。校验失败统一 `INVALID_LINEUP`。**过期快照不会让防守消失** |
+| `GET /pvp/defense` | 未设置返回 200 + `defense` 缺省；已设置返回 `petIds/createdAt/expiresAt/contentVersion/stale`。`stale = now > expiresAt`（默认 24h），只提示重设，不影响被挑战 |
+| `GET /pvp/opponent` | 服务端选对手：候选（active、非自己、有非空快照）→ 窗口 `200 → 600 → 不限` → `rating 差 → 平均等级差 → accountId` 排序；候选 ≥3 时排除最近 24h 打过的 3 个对手（排除后为空则忽略）。无真人候选时机器人兜底。返回 `challengesRemaining/dailyLimit/seasonId` |
+| `POST /pvp/fight` | `{ opponentAccountId }`：服务器生成 seed → `core.buildPvpBattleSetup` → 双方 `autoCommand` 模拟 → Elo/属性/统计 → 落 `pvp_replays` → 扣次数。客户端不能提交阵容/属性/seed/结果 |
+| `GET /pvp/replay/:id` | 仅攻守双方可读（`FORBIDDEN`）；不存在 `NOT_FOUND`；超过 `replayTtlMs`（默认 30d）`REPLAY_EXPIRED`。回放以已存 `events` 为准，`setup+seed+commands` 仅供复算 |
+| `GET /leaderboard` | `kind=rating\|codex\|gene\|generation`；`seasonId` 缺省当前赛季（传其他值 `VALIDATION_FAILED`）；`limit` 默认 20、最大 50。排序 `value desc → rating desc → accountId asc`；返回 top N + `self` + `selfEligible`；机器人/非 active 账号不进榜 |
 
-- 所有写端点都要求 `Idempotency-Key` + `X-Base-Revision`，并走同一流水线与审计；审计动作含 `battle.pve.claim`、`breeding.start`、`breeding.claim`。
+- 所有写端点都要求 `Idempotency-Key` + `X-Base-Revision`，并走同一流水线与审计；审计动作含 `battle.pve.claim`、`breeding.start`、`breeding.claim`、`pvp.defense.set`、`pvp.fight`。
+
+**PvP 参数口径（服务端 `ServerConfig.pvp`，环境变量可覆盖）**
+
+| 参数 | 默认 | 环境变量 |
+|---|---|---|
+| `seasonId` | `s1` | `PETBATTLE_PVP_SEASON_ID` |
+| `initialRating` / `kWin` / `kLoss` / `kDraw` | 1000 / 32 / 24 / 16 | — |
+| `dailyChallenges` | 10 | `PETBATTLE_PVP_DAILY_LIMIT` |
+| `snapshotTtlMs` / `replayTtlMs` | 24h / 30d | `PETBATTLE_PVP_SNAPSHOT_TTL_MS` / `PETBATTLE_PVP_REPLAY_TTL_MS` |
+| `matchWindows` | `[200, 600, ∞]` | — |
+| `leaderboardDefaultLimit` / `Max` | 20 / 50 | — |
+| `botsEnabled` / `botRating` | true / 1000 | `PETBATTLE_PVP_BOTS`（true/false） |
+| 模拟并发 | 2 | `PETBATTLE_PVP_CONCURRENCY`（沿用 M1） |
+
+- **Elo**：`Ea = 1/(1+10^((Rb−Ra)/400))`；K 按攻方结果取 32/24/16；`delta = round(K×(S−Ea))`，攻方 `+delta`、防守方 `−delta`，最后各自钳到 ≥0。机器人对局双方 rating 不变。
+- **防守方结算**：调用 `core.applyPvpOutcome` 时 `result` 取攻方反面（win↔loss，draw 不变），`ranked` 与攻方一致。
+- **并发**：同一防守方被多人同时挑战时，按 `accountId` 升序加锁，防守方评分/统计在最新档上重试落库，不丢更新（P-105）。
+- **日报**：按 `Asia/Shanghai` 00:00 切日；只由成功落库的 fight 扣减，幂等重放不扣；匹配不消耗次数。
+- **赛季**：换季软重置 `rating = round((rating + 1000) / 2)`，在 PvP 读写档发现 `profile.pvp.seasonId !== 当前赛季` 时惰性触发；M2 只有当前赛季可查。
+- **机器人**：`accountId = bot_<0..4>`（按攻方账号稳定映射到 5 物种模板之一），`displayName = 训练师·<物种>`，3 只固定模板、等级 = 攻方平均等级钳制 1~20；不计榜、不改段位。
+- **排行榜资格**：`rating` 需至少 1 场真人排位；`codex` 只算 `owned`；`gene` 取非蛋宠物四项基因均值向下取整的最大值；`generation` 取非蛋宠物最大世代。
 
 **PvE 会话生命周期（CONTRACT §7.4 E-01/E-02）**
 
@@ -568,11 +602,12 @@ interface ApiResponse<T> {
 
 | 端点 | 缺什么 | 说明 |
 |---|---|---|
-| `/pvp/defense` `/pvp/opponent` `/pvp/fight` `/pvp/replay/:id` | `buildBattleSetup`/`runBattle` 已可用；匹配、防守快照有效期与战报存储未定义 | 表结构可复用 `battle_sessions` 的思路（存 setup 快照），但 PvP 还需要匹配与回放口径 |
-| `/leaderboard` `/friends` `/friends/:id/visit` | — | 指标口径（CONTRACT §10.3）与好友规则未定 |
-| `/account/bind` `/account/unbind` `/auth/wechat` `/auth/steam` | — | 需要平台密钥与外部网络校验 |
-| 限流与异常检测 | — | 按账号/IP，Redis 后置 |
+| `/friends` `/friends/:id/visit` | — | Phase 2；好友规则与每日上限未定 |
+| `/account/bind` `/account/unbind` `/auth/wechat` `/auth/steam` | — | 需要平台密钥与外部网络校验（CONTRACT §7.6） |
+| 限流与异常检测 | — | 按账号/IP，Redis 后置；M2 只有 PvP 日报与模拟并发 |
+
+- M2 已实现：`/pvp/defense`（POST/GET）、`/pvp/opponent`、`/pvp/fight`、`/pvp/replay/:id`、`/leaderboard`；PvP 使用独立表（`pvp_defense_snapshots` / `pvp_replays` / `pvp_daily_counters`），未复用 `battle_sessions`，仍遵循 PITFALLS P-027（快照不可引用实时宠物）。
 
 **产品待确认（按现状实现）**：`feed/clean/play` 目前允许操作不在栖息地的宠物（core 对不在栖息地的情况使用默认恢复量 20/20），服务端不额外加限制；是否收紧为「仅栖息地内互动」等 PRD 口径确认后再改。
 
-- `battle_sessions` 已由 PvE 使用（快照 + 状态 CAS）；PvP 接入时按同样思路扩展 `kind`/防守快照，仍遵循 PITFALLS P-027（快照不可引用实时宠物）。
+- PvP 未复用 `battle_sessions`：PvE 会话是“待 claim 的一次性战斗”，PvP 是“长期防守快照 + 已结算战报”，生命周期与检索方式不同。两者都遵循 PITFALLS P-027（快照不可引用实时宠物）。

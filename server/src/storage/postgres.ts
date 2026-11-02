@@ -12,7 +12,15 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 
-import type { BattleSetup, PetId, Profile } from '@petbattle/core';
+import type {
+  BattleEvent,
+  BattleSetup,
+  BattleUnitInit,
+  BattleWinner,
+  Command,
+  PetId,
+  Profile,
+} from '@petbattle/core';
 import type { AuthProvider } from '@petbattle/protocol';
 
 import type {
@@ -20,6 +28,8 @@ import type {
   AccountStatus,
   AuditEntry,
   BattleSessionRecord,
+  PvpDefenseRecord,
+  PvpReplayRecord,
   SessionRecord,
   Store,
   StoredResponse,
@@ -74,6 +84,71 @@ interface BattleSessionRow {
   created_at: number;
   expires_at: number;
   status: string;
+}
+
+interface PvpDefenseRow {
+  account_id: string;
+  pet_ids: PetId[];
+  units: BattleUnitInit[];
+  content_version: string;
+  created_at: number;
+  expires_at: number;
+}
+
+interface PvpReplayRow {
+  replay_id: string;
+  attacker_id: string;
+  defender_id: string;
+  is_bot: boolean;
+  season_id: string;
+  content_version: string;
+  setup: BattleSetup;
+  seed: number;
+  commands: Command[];
+  events: BattleEvent[];
+  winner: number | null;
+  turns: number;
+  attacker_rating_before: number;
+  attacker_rating_after: number;
+  defender_rating_before: number;
+  defender_rating_after: number;
+  created_at: number;
+  expires_at: number;
+}
+
+function toPvpDefense(row: PvpDefenseRow): PvpDefenseRecord {
+  return {
+    accountId: row.account_id,
+    petIds: row.pet_ids,
+    units: row.units,
+    contentVersion: row.content_version,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+  };
+}
+
+function toPvpReplay(row: PvpReplayRow): PvpReplayRecord {
+  const winner: BattleWinner = row.winner === 0 || row.winner === 1 ? row.winner : null;
+  return {
+    replayId: row.replay_id,
+    attackerId: row.attacker_id,
+    defenderId: row.defender_id,
+    isBot: row.is_bot,
+    seasonId: row.season_id,
+    contentVersion: row.content_version,
+    setup: row.setup,
+    seed: row.seed,
+    commands: row.commands,
+    events: row.events,
+    winner,
+    turns: row.turns,
+    attackerRatingBefore: row.attacker_rating_before,
+    attackerRatingAfter: row.attacker_rating_after,
+    defenderRatingBefore: row.defender_rating_before,
+    defenderRatingAfter: row.defender_rating_after,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+  };
 }
 
 function toBattleSession(row: BattleSessionRow): BattleSessionRecord {
@@ -203,6 +278,11 @@ export class PostgresStore implements Store {
     ]);
   }
 
+  async listAccounts(): Promise<AccountRecord[]> {
+    const result = await this.pool.query<AccountRow>('select * from accounts order by id');
+    return result.rows.map(toAccount);
+  }
+
   async getProfile(accountId: string): Promise<Profile | undefined> {
     const result = await this.pool.query<ProfileRow>(
       'select data from profiles where account_id = $1',
@@ -226,9 +306,20 @@ export class PostgresStore implements Store {
       `update profiles
           set revision = $2, data = $3::jsonb, updated_at = $4
         where account_id = $1 and revision = $5`,
-      [profile.accountId, profile.revision, JSON.stringify(profile), profile.lastEvaluatedAt, expectedRevision],
+      [
+        profile.accountId,
+        profile.revision,
+        JSON.stringify(profile),
+        profile.lastEvaluatedAt,
+        expectedRevision,
+      ],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async listProfiles(): Promise<Profile[]> {
+    const result = await this.pool.query<ProfileRow>('select data from profiles');
+    return result.rows.map((row) => row.data);
   }
 
   async createSession(session: SessionRecord): Promise<void> {
@@ -255,10 +346,10 @@ export class PostgresStore implements Store {
   }
 
   async revokeSession(sessionId: string, at: number): Promise<void> {
-    await this.pool.query('update sessions set revoked_at = $2 where id = $1 and revoked_at is null', [
-      sessionId,
-      at,
-    ]);
+    await this.pool.query(
+      'update sessions set revoked_at = $2 where id = $1 and revoked_at is null',
+      [sessionId, at],
+    );
   }
 
   async getStoredResponse(
@@ -288,7 +379,15 @@ export class PostgresStore implements Store {
       `insert into idempotency_keys (scope, key, fingerprint, status, body, created_at, expires_at)
        values ($1, $2, $3, $4, $5::json, $6, $7)
        on conflict (scope, key) do nothing`,
-      [scope, key, value.fingerprint, value.status, JSON.stringify(value.body), value.createdAt, value.expiresAt],
+      [
+        scope,
+        key,
+        value.fingerprint,
+        value.status,
+        JSON.stringify(value.body),
+        value.createdAt,
+        value.expiresAt,
+      ],
     );
   }
 
@@ -337,6 +436,136 @@ export class PostgresStore implements Store {
       [battleId],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * 快照 + 存档同事务（F-01 一致性要求）。
+   * 用单条 data-modifying CTE：`updated` 为空时 `snapshot` 不插入任何行，
+   * 两条写要么一起生效、要么都不生效；不需要额外连接/事务管理。
+   */
+  async savePvpDefenseWithProfile(
+    snapshot: PvpDefenseRecord,
+    profile: Profile,
+    expectedRevision: number,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `with updated as (
+         update profiles
+            set revision = $2, data = $3::jsonb, updated_at = $4
+          where account_id = $1 and revision = $5
+          returning account_id
+       ), snapshot as (
+         insert into pvp_defense_snapshots
+           (account_id, pet_ids, units, content_version, created_at, expires_at)
+         select $1, $6::jsonb, $7::jsonb, $8, $9, $10
+           from updated
+         on conflict (account_id) do update
+           set pet_ids = excluded.pet_ids,
+               units = excluded.units,
+               content_version = excluded.content_version,
+               created_at = excluded.created_at,
+               expires_at = excluded.expires_at
+         returning account_id
+       )
+       select account_id from updated`,
+      [
+        profile.accountId,
+        profile.revision,
+        JSON.stringify(profile),
+        profile.lastEvaluatedAt,
+        expectedRevision,
+        JSON.stringify(snapshot.petIds),
+        JSON.stringify(snapshot.units),
+        snapshot.contentVersion,
+        snapshot.createdAt,
+        snapshot.expiresAt,
+      ],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getPvpDefense(accountId: string): Promise<PvpDefenseRecord | undefined> {
+    const result = await this.pool.query<PvpDefenseRow>(
+      'select * from pvp_defense_snapshots where account_id = $1',
+      [accountId],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : toPvpDefense(row);
+  }
+
+  async listPvpDefenses(): Promise<PvpDefenseRecord[]> {
+    const result = await this.pool.query<PvpDefenseRow>('select * from pvp_defense_snapshots');
+    return result.rows.map(toPvpDefense);
+  }
+
+  async createPvpReplay(replay: PvpReplayRecord): Promise<void> {
+    await this.pool.query(
+      `insert into pvp_replays
+         (replay_id, attacker_id, defender_id, is_bot, season_id, content_version, setup, seed,
+          commands, events, winner, turns, attacker_rating_before, attacker_rating_after,
+          defender_rating_before, defender_rating_after, created_at, expires_at)
+       values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb,
+               $11, $12, $13, $14, $15, $16, $17, $18)`,
+      [
+        replay.replayId,
+        replay.attackerId,
+        replay.defenderId,
+        replay.isBot,
+        replay.seasonId,
+        replay.contentVersion,
+        JSON.stringify(replay.setup),
+        replay.seed,
+        JSON.stringify(replay.commands),
+        JSON.stringify(replay.events),
+        replay.winner,
+        replay.turns,
+        replay.attackerRatingBefore,
+        replay.attackerRatingAfter,
+        replay.defenderRatingBefore,
+        replay.defenderRatingAfter,
+        replay.createdAt,
+        replay.expiresAt,
+      ],
+    );
+  }
+
+  async getPvpReplay(replayId: string): Promise<PvpReplayRecord | undefined> {
+    const result = await this.pool.query<PvpReplayRow>(
+      'select * from pvp_replays where replay_id = $1',
+      [replayId],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : toPvpReplay(row);
+  }
+
+  async listPvpReplaysByAttacker(accountId: string, since: number): Promise<PvpReplayRecord[]> {
+    const result = await this.pool.query<PvpReplayRow>(
+      `select * from pvp_replays
+        where attacker_id = $1 and created_at >= $2
+        order by created_at desc`,
+      [accountId, since],
+    );
+    return result.rows.map(toPvpReplay);
+  }
+
+  async getDailyUsed(accountId: string, dayKey: string): Promise<number> {
+    const result = await this.pool.query<{ used: number }>(
+      'select used from pvp_daily_counters where account_id = $1 and day_key = $2',
+      [accountId, dayKey],
+    );
+    return result.rows[0]?.used ?? 0;
+  }
+
+  async incrementDailyUsed(accountId: string, dayKey: string): Promise<number> {
+    const result = await this.pool.query<{ used: number }>(
+      `insert into pvp_daily_counters (account_id, day_key, used)
+       values ($1, $2, 1)
+       on conflict (account_id, day_key) do update
+         set used = pvp_daily_counters.used + 1
+       returning used`,
+      [accountId, dayKey],
+    );
+    return result.rows[0]?.used ?? 1;
   }
 
   async appendAudit(entry: AuditEntry): Promise<void> {

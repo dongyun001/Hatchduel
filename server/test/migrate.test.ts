@@ -21,9 +21,7 @@ function fakePool(): { pool: Queryable & { end(): Promise<void> }; migrations: s
       }
       if (text.startsWith('select 1 from schema_migrations')) {
         const name = String(values?.[0]);
-        return applied.has(name)
-          ? { rows: [{} as T], rowCount: 1 }
-          : { rows: [], rowCount: 0 };
+        return applied.has(name) ? { rows: [{} as T], rowCount: 1 } : { rows: [], rowCount: 0 };
       }
       if (text.startsWith('insert into schema_migrations')) {
         applied.add(String(values?.[0]));
@@ -46,11 +44,12 @@ describe('PostgresStore.migrate', () => {
     const store = new PostgresStore(pool);
 
     await store.migrate();
-    expect(migrations).toHaveLength(2);
+    expect(migrations).toHaveLength(3);
     expect(migrations[0]).toContain('create table if not exists accounts');
     expect(migrations[1]).toContain('battle_sessions');
+    expect(migrations[2]).toContain('pvp_defense_snapshots');
 
     await store.migrate();
-    expect(migrations).toHaveLength(2);
+    expect(migrations).toHaveLength(3);
   });
 });

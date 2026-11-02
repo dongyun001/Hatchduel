@@ -14,7 +14,9 @@ import type { AuthService } from '../services/auth-service.js';
 import type { BattleService } from '../services/battle-service.js';
 import type { BreedingService } from '../services/breeding-service.js';
 import type { IdempotencyService } from '../services/idempotency.js';
+import type { LeaderboardService } from '../services/leaderboard-service.js';
 import type { ProfileService } from '../services/profile-service.js';
+import type { PvpService } from '../services/pvp-service.js';
 import type { Store } from '../storage/types.js';
 import type { TokenSigner } from '../auth/token.js';
 import type { Reply } from './reply.js';
@@ -38,12 +40,14 @@ export interface ServerDeps {
   tokens: TokenSigner;
   core: CoreAdapter;
   mutex: KeyedMutex;
-  /** 异步 PvP 模拟限并发（TECH_DESIGN §16.1）；M1 尚未接线。 */
+  /** 异步 PvP 模拟限并发（TECH_DESIGN §16.1）；`PvpService` 已接线。 */
   pvpSemaphore: Semaphore;
   auth: AuthService;
   profiles: ProfileService;
   battles: BattleService;
   breeding: BreedingService;
+  pvp: PvpService;
+  leaderboard: LeaderboardService;
   idempotency: IdempotencyService;
 }
 

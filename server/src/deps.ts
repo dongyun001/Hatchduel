@@ -15,7 +15,9 @@ import { AuthService } from './services/auth-service.js';
 import { BattleService } from './services/battle-service.js';
 import { BreedingService } from './services/breeding-service.js';
 import { IdempotencyService } from './services/idempotency.js';
+import { LeaderboardService } from './services/leaderboard-service.js';
 import { ProfileService } from './services/profile-service.js';
+import { PvpService } from './services/pvp-service.js';
 import type { Store } from './storage/types.js';
 
 export interface CreateDepsOptions {
@@ -42,6 +44,7 @@ export function createDeps(options: CreateDepsOptions): ServerDeps {
     });
 
   const profiles = new ProfileService({ store: options.store, core, mutex, logger });
+  const pvpSemaphore = new Semaphore(options.config.pvpSimulationConcurrency);
 
   return {
     config: options.config,
@@ -50,7 +53,7 @@ export function createDeps(options: CreateDepsOptions): ServerDeps {
     tokens,
     core,
     mutex,
-    pvpSemaphore: new Semaphore(options.config.pvpSimulationConcurrency),
+    pvpSemaphore,
     clock,
     auth: new AuthService({
       store: options.store,
@@ -69,6 +72,19 @@ export function createDeps(options: CreateDepsOptions): ServerDeps {
       sessionTtlMs: options.config.battleSessionTtlMs,
     }),
     breeding: new BreedingService({ core, profiles }),
+    pvp: new PvpService({
+      store: options.store,
+      core,
+      profiles,
+      mutex,
+      semaphore: pvpSemaphore,
+      logger,
+      settings: options.config.pvp,
+    }),
+    leaderboard: new LeaderboardService({
+      store: options.store,
+      settings: options.config.pvp,
+    }),
     idempotency: new IdempotencyService(options.store, options.config.idempotencyTtlMs, mutex),
   };
 }

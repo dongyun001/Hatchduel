@@ -9,13 +9,19 @@
  * - 可通过 `PETBATTLE_CORE_STUB=strict` 关闭降级，让未实现直接暴露为 501。
  */
 import {
+  BattleEngine,
   CoreNotImplementedError,
+  advancePet as coreAdvancePet,
   advanceProfile as coreAdvanceProfile,
   applyPveRewards as coreApplyPveRewards,
+  applyPvpOutcome as coreApplyPvpOutcome,
+  buildDefenseSnapshot as coreBuildDefenseSnapshot,
   buildPveBattleSetup as coreBuildPveBattleSetup,
+  buildPvpBattleSetup as coreBuildPvpBattleSetup,
   claimBreeding as coreClaimBreeding,
   cleanPet as coreCleanPet,
   collectHabitat as coreCollectHabitat,
+  createPet as coreCreatePet,
   feedPet as coreFeedPet,
   movePetToHabitat as coreMovePetToHabitat,
   playWithPet as corePlayWithPet,
@@ -25,12 +31,17 @@ import {
   upgradeHabitat as coreUpgradeHabitat,
 } from '@petbattle/core';
 import type {
+  AdvancePetResult,
   BattleEvent,
   BattleSetup,
+  BattleUnitInit,
   BattleWinner,
+  BreedingConfig,
   ClaimBreedingResult,
   Command,
   ConfigRepo,
+  CreatePetInput,
+  DefenseSnapshot,
   EpochMs,
   HabitatId,
   Id,
@@ -40,6 +51,8 @@ import type {
   ProfilePatch,
   PveRewardContext,
   PveRewardResult,
+  PvpOutcome,
+  PvpOutcomeResult,
   ReleaseResult,
   Rng,
   StageConfig,
@@ -84,11 +97,7 @@ export interface CoreAdapter {
   // PvE 与繁殖（contract-v1.5）。
   /** 全部关卡配置（按 order 排序由调用方处理），用于解锁校验与奖励档查找。 */
   allStages(): readonly StageConfig[];
-  buildPveBattleSetup(
-    party: readonly PetInstance[],
-    stage: StageConfig,
-    seed: number,
-  ): BattleSetup;
+  buildPveBattleSetup(party: readonly PetInstance[], stage: StageConfig, seed: number): BattleSetup;
   /** 从零重放；失败抛 `BattleReplayError`（invalid_command / not_finished）。 */
   runBattle(
     setup: BattleSetup,
@@ -111,9 +120,39 @@ export interface CoreAdapter {
   /** 失败抛 `BreedingClaimError`。 */
   claimBreeding(profile: Profile, eggId: PetId, now: EpochMs): ClaimBreedingResult;
 
+  // 异步 PvP（contract-v1.6 F-09）。
+  /** 建个体；机器人阵容与测试用。 */
+  createPet(input: CreatePetInput): PetInstance;
+  /** 推进单只宠物（阶段/状态/冷却）；机器人需要从出生时间推进到成年。 */
+  advancePet(pet: PetInstance, now: EpochMs): AdvancePetResult;
+  breedingConfig(): BreedingConfig;
+  contentVersion(): string;
+  /** 物种展示名（机器人 `训练师·<物种>`）。 */
+  speciesName(speciesId: Id): string;
+  /** 把本人宠物定格成防守快照；失败抛 `DefenseError`。 */
+  buildDefenseSnapshot(profile: Profile, petIds: readonly PetId[], now: EpochMs): DefenseSnapshot;
+  /** team0 = 攻方、team1 = 防守快照；不改入参数组。 */
+  buildPvpBattleSetup(
+    attackerPets: readonly PetInstance[],
+    defenseUnits: readonly BattleUnitInit[],
+    seed: number,
+  ): BattleSetup;
+  /** 双方都用 core 内置 `autoCommand`；返回实际执行的指令与完整事件流。 */
+  simulatePvp(setup: BattleSetup): {
+    commands: Command[];
+    events: BattleEvent[];
+    winner: BattleWinner;
+    turns: number;
+  };
+  /** 只改 pvp/stats；Elo 已在服务端算好并传入 `ratingAfter`。 */
+  applyPvpOutcome(profile: Profile, outcome: PvpOutcome): PvpOutcomeResult;
+
   /** 是否曾经降级过；用于日志告警与运维排查。 */
   readonly degraded: boolean;
 }
+
+/** 与 PvE 相同的指令上限：30 回合 × 双方各 3 只，留余量防死循环。 */
+const MAX_PVP_COMMANDS = 600;
 
 export interface CoreAdapterOptions {
   allowStub: boolean;
@@ -130,9 +169,12 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
     degraded = true;
     if (warned) return;
     warned = true;
-    options.logger.warn('领域推进降级为恒等推进（仅用于契约联调；PETBATTLE_CORE_STUB=strict 可关闭）', {
-      reason,
-    });
+    options.logger.warn(
+      '领域推进降级为恒等推进（仅用于契约联调；PETBATTLE_CORE_STUB=strict 可关闭）',
+      {
+        reason,
+      },
+    );
   };
 
   /** 放生/繁殖这类必须读配置的操作没有降级余地：没配置就直接报配置错误。 */
@@ -217,6 +259,64 @@ export function createCoreAdapter(options: CoreAdapterOptions): CoreAdapter {
 
     claimBreeding(profile, eggId, now) {
       return coreClaimBreeding(profile, eggId, now, requireRepo());
+    },
+
+    createPet(input) {
+      return coreCreatePet(input, requireRepo());
+    },
+
+    advancePet(pet, now) {
+      return coreAdvancePet(pet, now, requireRepo());
+    },
+
+    breedingConfig() {
+      return requireRepo().breeding();
+    },
+
+    contentVersion() {
+      return requireRepo().contentVersion;
+    },
+
+    speciesName(speciesId) {
+      return requireRepo().species(speciesId).name;
+    },
+
+    buildDefenseSnapshot(profile, petIds, now) {
+      return coreBuildDefenseSnapshot(profile, petIds, now, requireRepo());
+    },
+
+    buildPvpBattleSetup(attackerPets, defenseUnits, seed) {
+      return coreBuildPvpBattleSetup(attackerPets, defenseUnits, requireRepo(), seed);
+    },
+
+    simulatePvp(setup) {
+      const repo = requireRepo();
+      const engine = BattleEngine.create(setup, repo);
+      const commands: Command[] = [];
+
+      while (engine.state.phase === 'ongoing') {
+        if (commands.length >= MAX_PVP_COMMANDS) {
+          throw new AppError('INTERNAL', `PvP 模拟指令超过上限 ${MAX_PVP_COMMANDS}`);
+        }
+        const actor = engine.state.order[engine.state.cursor];
+        if (actor === undefined) {
+          throw new AppError('INTERNAL', 'PvP 模拟找不到当前行动单位');
+        }
+        const command = engine.autoCommand(actor);
+        commands.push(command);
+        engine.submit(command);
+      }
+
+      return {
+        commands,
+        events: [...engine.state.log],
+        winner: engine.state.winner,
+        turns: engine.state.turn,
+      };
+    },
+
+    applyPvpOutcome(profile, outcome) {
+      return coreApplyPvpOutcome(profile, outcome);
     },
 
     get degraded() {
