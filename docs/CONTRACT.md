@@ -167,12 +167,14 @@ interface ApiResponse<T> {
 | 变更 | 版本动作 |
 |---|---|
 | 新增可选字段 / 新端点 | 兼容；`contract-v1.x`，`PROTOCOL_VERSION` 仍为 `v1` |
+| 删除/重命名字段、改语义、改必填性 | 不兼容；升 `v2`，新建 `docs/CONTRACT-v2.md`，双版本过渡 |
+| 错误码新增 | 兼容；只增不改 |
+
+版本记录：
 
 - **contract-v1.1（2026-10-29）**：新增 `BASE_REVISION_HEADER` 常量（C 实现 `/profile/rename` 时需要的写操作头）。兼容变更，端点与 DTO 不变。
 - **contract-v1.3（2026-10-29）**：新增 `POST /habitat/move`（放入/移出栖息地），解决“初始宠在栖息地内 → 无法放生”的死路；兼容变更。
 - **contract-v1.6（2026-11-02）**：M2 异步 PvP + 排行榜（§7.5）：新增 `GET /pvp/defense`、三个错误码、PvP/回放/排行榜 DTO 字段；兼容变更。
-| 删除/重命名字段、改语义、改必填性 | 不兼容；升 `v2`，新建 `docs/CONTRACT-v2.md`，双版本过渡 |
-| 错误码新增 | 兼容；只增不改 |
 
 ---
 
@@ -384,7 +386,7 @@ interface PvpDefenseSnapshot {
 ```
 
 - **存 `BattleUnitInit[]`，不存 `BattleSetup`**：seed 每场由服务端生成，不能跨场复用。`units` 的 uid 固定 `d0/d1/d2`，`petId` 保留防守方原 id。
-- 生成：`POST /pvp/defense` 用 core `buildDefenseSnapshot(profile, petIds, now, cfg)`（F-09）从本人宠物构建；客户端永远不提交属性/单位。
+- 生成：`POST /pvp/defense` 用 core `buildDefenseSnapshot(profile, petIds, now, cfg)`（F-09）从本人宠物构建；core 不返回 `accountId`，由服务端落库时补上。客户端永远不提交属性/单位。
 - 校验：`petIds` 为 1~3 个、不重复、存在、非蛋；否则 `INVALID_LINEUP`。锁定不阻止进防守；同一只可以同时在出战编队与防守阵容。
 - 有效期 **24h**。**过期策略（二选一已定）**：过期快照仍作为对战输入，不会让不活跃玩家的防守消失；但 `GET /pvp/defense` 返回 `stale=true`，客户端提示“重新设置”。设置新快照直接替换旧快照。
 - 配置变更不回溯：快照内的 `units` 已含 `deriveStats` 结果；改配置、改基因、升级、放生都不修改旧快照。战报回放只认存储的 `setup`。
