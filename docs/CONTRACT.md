@@ -913,7 +913,22 @@ Postgres 迁移与 docker-compose 已就绪。其余端点仍返回 404。
 | 确定性 | 同一 `(attackerPets, snapshot.units, seed)` 双跑事件流与指纹一致 |
 | 客户端同步 | `sync-lib` 重新生成 7 个 core 文件；客户端 typecheck、verify-errors、verify-api-client 通过 |
 | 接线口径 | 防守方调用 `applyPvpOutcome` 时 `result` 取反（win↔loss，draw 不变）；已写入 §7.5 F-03 |
-| 遗留 | C 删除 `server/src/domain/rng.ts` 的临时 CSPRNG 适配；按 §7.5 F-01 做快照与 profile 同事务 |
+| 遗留 | ~~C 删除 `server/src/domain/rng.ts` 的临时 CSPRNG 适配~~ 已在 §11.17 完成；快照与 profile 同事务已实现 |
+
+### 11.17 C M2 批次集成（2026-11-02）
+
+| 项 | 结果 |
+|---|---|
+| 测试 | 539 passed（45 文件）；Postgres 4 项用 `PETBATTLE_TEST_DATABASE_URL` 全跑通过 |
+| 端点 | `POST/GET /pvp/defense`、`GET /pvp/opponent`、`POST /pvp/fight`、`GET /pvp/replay/:id`、`GET /leaderboard` |
+| 存储 | `003_pvp.sql`：防守快照/战报/日报表与索引；快照与 `profile.pvp.defense` 用单条 data-modifying CTE 原子写入 |
+| 规则 | Elo K=32/24/16；防守方 result 取反；机器人不改分不计榜；日报 10 次（Asia/Shanghai）；战报 30 天；四榜口径按 F-05 |
+| 并发 | 模拟 Semaphore(2)；同账号 KeyedMutex；防守方 CAS 失败重读重试 3 次 |
+| E-09 | 删除 `server/src/domain/rng.ts`，繁殖改用 `core.createRng`；seed 仍由 CSPRNG 生成 |
+| 冒烟 | 内存模式登录→编队→防守→匹配→fight→双方读回放→双榜全 200；compose 容器内全链路 200，`schema_migrations` 001/002/003 |
+| 环境 | 宿主机 3000 的遗留 dev server（PID 58576，根仓库 `tsx src/main.ts`）已由 0 号停止；`petbattle-db-1` 测试库留在 127.0.0.1:5433 |
+| 已知 | 回放无后台清理（靠 expiresAt）；换季只做 rating 软重置、不清日报/ranked（M2 不切季）；跨实例并发依赖 CAS/409 |
+| 后续 | B 任务 B：切真实接口、两账号验收、构建/真机；M3 评估 Redis 榜、赛季配置外置、回放清理 |
 
 ### 11.16 B 任务 A 预验收（2026-11-02，分支 `m2/b-client`，未合并）
 
