@@ -82,3 +82,19 @@ export class BreedingClaimError extends Error {
     this.reason = reason;
   }
 }
+
+/**
+ * 防守快照校验失败（contract-v1.6 F-01/F-09）。
+ * 服务端统一映射 `INVALID_LINEUP`；锁定不阻止进防守。
+ */
+export type DefenseErrorReason = 'invalid_count' | 'duplicate' | 'pet_not_found' | 'pet_is_egg';
+
+export class DefenseError extends Error {
+  readonly reason: DefenseErrorReason;
+
+  constructor(reason: DefenseErrorReason) {
+    super(`防守快照被拒绝：${reason}`);
+    this.name = 'DefenseError';
+    this.reason = reason;
+  }
+}
