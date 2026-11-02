@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createRng } from '@petbattle/core';
 import { gaussian, mulberry32 } from '../src/rng.js';
 import type { Rng } from '@petbattle/core';
 
@@ -44,6 +45,44 @@ describe('mulberry32（DOMAIN §1.1）', () => {
     const second = Array.from({ length: 300 }, (_, i) => mulberry32(i).pick(items));
     expect(second).toEqual(first);
     for (const item of items) expect(first).toContain(item);
+  });
+});
+
+describe('createRng（contract-v1.6 F-09，关闭 E-09）', () => {
+  it('同种子序列一致，不同种子不同', () => {
+    const seq = createRng(4242);
+    const first = Array.from({ length: 30 }, () => seq());
+    expect(new Set(first).size).toBeGreaterThan(1);
+
+    const a = createRng(4242);
+    const b = createRng(4242);
+    expect(Array.from({ length: 30 }, () => b())).toEqual(Array.from({ length: 30 }, () => a()));
+
+    const other = createRng(2424);
+    expect(Array.from({ length: 30 }, () => other())).not.toEqual(first);
+  });
+
+  it('与内部 mulberry32 完全一致（同一个 PRNG，不是第二份实现）', () => {
+    const publicRng = createRng(987654321);
+    const internal = mulberry32(987654321);
+    expect(Array.from({ length: 50 }, () => publicRng())).toEqual(
+      Array.from({ length: 50 }, () => internal()),
+    );
+  });
+
+  it('满足 Rng 接口：chance 与 pick 可确定复现', () => {
+    const a = createRng(7);
+    const b = createRng(7);
+
+    const aChances = Array.from({ length: 20 }, () => a.chance(0.5));
+    const bChances = Array.from({ length: 20 }, () => b.chance(0.5));
+    expect(bChances).toEqual(aChances);
+
+    const items = ['x', 'y', 'z'] as const;
+    const aPicks = Array.from({ length: 20 }, () => a.pick(items));
+    const bPicks = Array.from({ length: 20 }, () => b.pick(items));
+    expect(bPicks).toEqual(aPicks);
+    expect(() => createRng(1).pick([])).toThrow(/空数组/);
   });
 });
 
