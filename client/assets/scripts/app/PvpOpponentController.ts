@@ -117,7 +117,8 @@ export class PvpOpponentController extends Component {
     this.renderStatus(root, frames, this.data);
     this.renderOpponent(root, frames, this.data);
 
-    const canFight = this.data.challengesRemaining > 0 && !this.busy;
+    const lineupMissing = profile.lineup.length === 0;
+    const canFight = this.data.challengesRemaining > 0 && !lineupMissing && !this.busy;
     const refresh = createButton(root, frames, {
       text: '刷新对手',
       width: 320,
@@ -129,13 +130,19 @@ export class PvpOpponentController extends Component {
     place(refresh, -520, -330);
 
     const fight = createButton(root, frames, {
-      text: canFight ? '开始挑战' : '今日次数已用完',
+      text: lineupMissing ? '先设置出战编队' : canFight ? '开始挑战' : '今日次数已用完',
       width: 420,
       height: 92,
       variant: 'primary',
-      disabled: !canFight,
+      disabled: this.busy || (!lineupMissing && this.data.challengesRemaining <= 0),
       busy: this.busy,
-      onClick: () => void this.fight(),
+      onClick: () => {
+        if (lineupMissing) {
+          this.openLineup();
+          return;
+        }
+        void this.fight();
+      },
     });
     place(fight, 0, -330);
 
@@ -255,7 +262,7 @@ export class PvpOpponentController extends Component {
       this.initialisedLineup = true;
       const allowed = new Set(Object.values(profile.pets).filter((pet) => pet.stage !== 'egg').map((pet) => pet.id));
       const preferred = profile.lineup.filter((id) => allowed.has(id)).slice(0, 3);
-      this.lineupSelected = preferred.length > 0 ? preferred : [...allowed].slice(0, 3);
+      this.lineupSelected = preferred.length > 0 ? preferred : Array.from(allowed).slice(0, 3);
     }
     this.lineupOpen = true;
     this.view?.refresh();

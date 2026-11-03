@@ -28,31 +28,38 @@ export function showRenameDialog(root: Node, frames: PlaceholderFrames, options:
   const boxNode = makeNode('rename-editbox', panel, 640, 76);
   paint(boxNode, frames.white, '#0f1a22');
   place(boxNode, 0, 66);
-
-  const labelNode = makeNode('edit-label', boxNode, 596, 60);
-  const textLabel = labelNode.addComponent(Label);
-  textLabel.fontSize = 30;
-  textLabel.lineHeight = 40;
-  textLabel.color = new Color().fromHEX(COLORS.text);
-  textLabel.verticalAlign = Label.VerticalAlign.CENTER;
-  textLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
-  labelNode.getComponent(UITransform)?.setContentSize(596, 60);
-
-  const placeholderNode = makeNode('edit-placeholder', boxNode, 596, 60);
-  const placeholderLabel = placeholderNode.addComponent(Label);
-  placeholderLabel.fontSize = 26;
-  placeholderLabel.lineHeight = 36;
-  placeholderLabel.color = new Color().fromHEX(COLORS.textDim);
-  placeholderLabel.verticalAlign = Label.VerticalAlign.CENTER;
-  placeholderLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
-  placeholderNode.getComponent(UITransform)?.setContentSize(596, 60);
+  const boxBg = makeNode('rename-editbox-bg', boxNode, 620, 64);
+  paint(boxBg, frames.white, '#0f1a22');
+  place(boxBg, 0, 0);
 
   const edit = boxNode.addComponent(EditBox);
-  edit.textLabel = textLabel;
-  edit.placeholderLabel = placeholderLabel;
-  edit.placeholder = '输入新名字（最多 12 字）';
+  const placeholderText = '输入新名字（最多 12 字）';
+  edit.placeholder = placeholderText;
   edit.maxLength = PET_NAME_MAX;
   edit.string = options.initial;
+
+  // EditBox 会自己创建 TEXT_LABEL / PLACEHOLDER_LABEL（默认 string 是 "label"）。
+  // 复用它们并统一样式，避免再出现一个游离的 "label" 文本。
+  const ensureLabel = (name: string, text: string, fontSize: number, color: string): Label => {
+    const node = boxNode.getChildByName(name) ?? makeNode(name, boxNode, 596, 60);
+    const label = node.getComponent(Label) ?? node.addComponent(Label);
+    label.string = text;
+    label.fontSize = fontSize;
+    label.lineHeight = Math.round(fontSize * 1.3);
+    label.color = new Color().fromHEX(color);
+    label.verticalAlign = Label.VerticalAlign.CENTER;
+    label.horizontalAlign = Label.HorizontalAlign.LEFT;
+    node.getComponent(UITransform)?.setContentSize(596, 60);
+    place(node, 0, 0);
+    return label;
+  };
+
+  const textLabel = ensureLabel('TEXT_LABEL', options.initial, 30, COLORS.text);
+  const placeholderLabel = ensureLabel('PLACEHOLDER_LABEL', placeholderText, 26, COLORS.textDim);
+  edit.textLabel = textLabel;
+  edit.placeholderLabel = placeholderLabel;
+  textLabel.node.active = options.initial.length > 0;
+  placeholderLabel.node.active = options.initial.length === 0;
 
   const error = makeLabel(panel, '', {
     fontSize: FONT_SIZE.small,
@@ -90,6 +97,8 @@ export function showRenameDialog(root: Node, frames: PlaceholderFrames, options:
 
   edit.node.on('text-changed', () => {
     error.string = '';
+    textLabel.node.active = edit.string.length > 0;
+    placeholderLabel.node.active = edit.string.length === 0;
   });
 
   async function submit(): Promise<void> {

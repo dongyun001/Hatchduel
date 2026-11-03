@@ -75,7 +75,7 @@ export class PetListController extends Component {
 
   private renderScene(root: Node, frames: PlaceholderFrames, state: Readonly<AppState>): void {
     const title = createTitle(root, '宠物列表');
-    place(title.node, 0, 440);
+    place(title.node, 0, 460);
 
     const profile = state.profile;
     if (!profile) {
@@ -105,12 +105,12 @@ export class PetListController extends Component {
           appStore.setPetFilter(filter.id);
         },
       });
-      place(button, (index - 1.5) * 220, 380);
+      place(button, (index - 1.5) * 220, 400);
     });
 
     // —— 左侧列表 ——
-    const listPanel = createPanel(root, frames, 920, 760, COLORS.panel);
-    place(listPanel, -450, 0);
+    const listPanel = createPanel(root, frames, 920, 720, COLORS.panel);
+    place(listPanel, -450, -40);
     const filtered = pets.filter((pet) => matchesFilter(pet, state.ui.petFilter));
 
     if (filtered.length === 0) {
@@ -127,11 +127,11 @@ export class PetListController extends Component {
         align: 'left',
         width: 840,
       });
-      place(header.node, 0, 346);
+      place(header.node, 0, 326);
 
       const list = createVirtualList<PetInstance>(listPanel, frames, {
         width: 860,
-        height: 640,
+        height: 600,
         rowHeight: ROW_HEIGHT,
         gap: 8,
         items: filtered,
@@ -145,13 +145,13 @@ export class PetListController extends Component {
         },
         renderRow: (pet, _index, row, width) => this.renderListRow(row, width, pet, frames),
       });
-      place(list.node, 0, -14);
+      place(list.node, 0, -24);
 
       const hint = makeLabel(listPanel, '点击查看八项属性、基因、特质、血统与技能', {
         fontSize: FONT_SIZE.small,
         color: COLORS.textDim,
       });
-      place(hint.node, 0, -350);
+      place(hint.node, 0, -330);
     }
 
     // —— 右侧图鉴 5×5 ——
@@ -209,17 +209,17 @@ export class PetListController extends Component {
     frames: PlaceholderFrames,
     profile: NonNullable<AppState['profile']>,
   ): void {
-    const panel = createPanel(root, frames, 840, 760, COLORS.panel);
-    place(panel, 560, 0);
+    const panel = createPanel(root, frames, 840, 720, COLORS.panel);
+    place(panel, 560, -40);
 
     const codexTitle = makeLabel(panel, '图鉴（5×5）', { fontSize: FONT_SIZE.heading, color: COLORS.text });
-    place(codexTitle.node, 0, 350);
+    place(codexTitle.node, 0, 300);
 
     const cfg = getConfigRepo();
     const speciesList = cfg.allSpecies();
     const elements = cfg.allElements();
-    const cell = 124;
-    const gap = 8;
+    const cell = 112;
+    const gap = 6;
     const startX = -((speciesList.length - 1) / 2) * (cell + gap);
     const startY = ((elements.length - 1) / 2) * (cell + gap);
 

@@ -188,20 +188,22 @@ export interface PvpFightResult extends PvpActionResult {
   data?: FightPvpResponse;
 }
 
-/** 一次挑战的幂等键：网络失败后从结果页重试时复用，避免重复扣次数。 */
-let fightAttempt: { key: string; opponent: PvpOpponentSummary } | null = null;
+/** 一次挑战的幂等键/baseRevision：网络失败后从结果页重试时复用，避免重复扣次数。 */
+let fightAttempt: { key: string; baseRevision: number; opponent: PvpOpponentSummary } | null = null;
 let fightSequence = 0;
 
 export async function fightPvp(
   opponent: PvpOpponentSummary,
   reuseIdempotencyKey?: string,
+  reuseBaseRevision?: number,
 ): Promise<PvpFightResult> {
   return withGuard<PvpFightResult>('pvp:fight', { ok: false, message: '请求处理中' }, async () => {
     const profile = currentProfile();
     if (!profile) return { ok: false, message: '没有存档' };
 
     const key = reuseIdempotencyKey ?? `pvp-fight-${nowMs().toString(36)}-${(fightSequence += 1)}`;
-    fightAttempt = { key, opponent };
+    const baseRevision = reuseBaseRevision ?? profile.revision;
+    fightAttempt = { key, baseRevision, opponent };
 
     const fault = await takeSimulatedPvpFaultFor([
       'DAILY_LIMIT_REACHED',
@@ -221,7 +223,7 @@ export async function fightPvp(
     if (isServerMode()) {
       const api = getApiClient();
       if (!api) return { ok: false, message: '服务端未连接' };
-      const res = await api.fightPvp({ opponentAccountId: opponent.accountId }, key);
+      const res = await api.fightPvp({ opponentAccountId: opponent.accountId }, key, baseRevision);
       if (!res.ok || !res.data) {
         const code = res.error?.code;
         const message = `挑战失败：${apiErrorText(code)}`;
@@ -259,14 +261,15 @@ export async function fightPvp(
   });
 }
 
-/** 网络/409 等失败后，用同一 Idempotency-Key 重试；服务端不会重复扣次数。 */
+/** 网络/5xx 失败后，用同一 Idempotency-Key + baseRevision 重试；服务端不会重复扣次数。 */
 export async function retryLastFight(): Promise<PvpFightResult> {
   if (!fightAttempt) return { ok: false, message: '没有可重试的挑战' };
   if (!isServerMode()) return { ok: false, message: '离线模式请重新挑战' };
-  return fightPvp(fightAttempt.opponent, fightAttempt.key);
+  return fightPvp(fightAttempt.opponent, fightAttempt.key, fightAttempt.baseRevision);
 }
 
-export async function loadPvpReplay(replayId: string): Promise<PvpLoadResult<GetPvpReplayResponse>> {  return withGuard<PvpLoadResult<GetPvpReplayResponse>>('pvp:replay:load', { ok: false, message: '请求处理中' }, async () => {
+export async function loadPvpReplay(replayId: string): Promise<PvpLoadResult<GetPvpReplayResponse>> {
+  return withGuard<PvpLoadResult<GetPvpReplayResponse>>('pvp:replay:load', { ok: false, message: '请求处理中' }, async () => {
     const fault = await takeSimulatedPvpFaultFor(['REPLAY_EXPIRED']);
     if (fault === 'REPLAY_EXPIRED') {
       return { ok: false, code: fault, message: `加载战报失败：${apiErrorText(fault)}` };

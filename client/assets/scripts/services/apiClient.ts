@@ -78,6 +78,8 @@ export interface CallOptions {
   pathParams?: Record<string, string>;
   /** 重试时复用同一个 key；缺省自动生成。 */
   idempotencyKey?: string;
+  /** 重试时复用首次请求的 baseRevision（服务端幂等指纹包含它）。 */
+  baseRevision?: number;
   /** 显式声明是写操作（默认按 ROUTES 判断）。 */
   write?: boolean;
 }
@@ -212,8 +214,12 @@ export class ApiClient {
     return this.call('getPvpOpponent', undefined);
   }
 
-  fightPvp(req: FightPvpRequest, idempotencyKey?: string): Promise<ApiResponse<FightPvpResponse>> {
-    return this.call('fightPvp', req, { idempotencyKey });
+  fightPvp(
+    req: FightPvpRequest,
+    idempotencyKey?: string,
+    baseRevision?: number,
+  ): Promise<ApiResponse<FightPvpResponse>> {
+    return this.call('fightPvp', req, { idempotencyKey, baseRevision });
   }
 
   getPvpReplay(replayId: string): Promise<ApiResponse<GetPvpReplayResponse>> {
@@ -260,7 +266,7 @@ export class ApiClient {
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     if (isWrite) {
       headers[IDEMPOTENCY_KEY_HEADER] = options.idempotencyKey ?? this.nextIdempotencyKey();
-      headers[BASE_REVISION_HEADER] = String(this.getBaseRevision());
+      headers[BASE_REVISION_HEADER] = String(options.baseRevision ?? this.getBaseRevision());
     }
 
     let url = `${this.baseUrl}${path}`;

@@ -43,8 +43,9 @@ export class PvpResultController extends Component {
 
     if (state.pvp.error) {
       const code = state.pvp.error.code;
-      // 网络/版本冲突可用同一 Idempotency-Key 重试；次数用尽/对手不可用回匹配页。
-      const retryable = !code || code === 'INTERNAL' || code === 'REVISION_CONFLICT' || code === 'RATE_LIMITED';
+      // 只有网络/5xx 才用同一 Idempotency-Key 重试；409 已用 latestProfile 重建，
+      // 应回匹配页用新 revision 重新发起（同 key/同 base 会再次 409）。
+      const retryable = !code || code === 'INTERNAL';
       const error = createErrorState(root, frames, {
         code,
         message: state.pvp.error.message,

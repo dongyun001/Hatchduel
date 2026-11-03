@@ -67,7 +67,11 @@ export function createVirtualList<T>(
   const layout = (): void => {
     offset = clamp(offset, 0, maxOffset());
     const first = Math.max(0, Math.floor(offset / step));
-    const last = Math.min(items.length - 1, Math.floor((offset + options.height) / step));
+    // 只实例化完整落在视口内的行；否则最后一行会画到视口外，压住底部提示。
+    const last = Math.min(
+      items.length - 1,
+      Math.floor((offset + options.height - options.rowHeight) / step),
+    );
 
     for (const [index, row] of rows) {
       if (index < first - 1 || index > last + 1) {

@@ -53,7 +53,7 @@ export class PetDetailController extends Component {
 
   private renderScene(root: Node, frames: PlaceholderFrames, state: Readonly<AppState>): void {
     const title = createTitle(root, '宠物详情');
-    place(title.node, 0, 440);
+    place(title.node, 0, 490);
 
     const profile = state.profile;
     const petId = state.ui.selectedPetId;

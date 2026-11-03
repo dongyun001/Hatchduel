@@ -3,7 +3,7 @@
 横屏 2D 工程，设计分辨率 **1920×1080**，虚拟像素基准 **640×360**（3× 整数放大）。
 M1 场景：Boot / Home / PetList / PetDetail / Breeding / Habitat / StageSelect / Battle。
 M2 批次 B1 新增：PvpDefense / PvpOpponent / PvpResult / PvpReplay / Leaderboard；
-PvP 为 **mock / server 双路径**（server 端点待 C 合并后做两账号验收）。
+PvP 为 **mock / server 双路径**，server 已按 contract-v1.6 接通 `/pvp/*` 与 `/leaderboard`。
 
 ## 打开工程
 
@@ -53,6 +53,14 @@ pnpm exec tsx client/tools/verify-errors.ts
 
 # 验证离线 PvP：防守校验/24h stale、匹配、真实事件流、回放、日报、Elo、四榜
 pnpm exec tsx client/tools/verify-pvp.ts
+
+# 真实服务端两账号验收（需先起服务端；默认 http://127.0.0.1:3101）
+pnpm exec tsx client/tools/verify-server-pvp.ts
+# 边界场景（各起一个对应环境变量的干净内存服务端）：
+PETBATTLE_API_URL=http://127.0.0.1:3102 VERIFY_SCENARIO=bot pnpm exec tsx client/tools/verify-server-pvp.ts
+PETBATTLE_API_URL=http://127.0.0.1:3103 VERIFY_SCENARIO=daily pnpm exec tsx client/tools/verify-server-pvp.ts
+PETBATTLE_API_URL=http://127.0.0.1:3104 VERIFY_SCENARIO=snapshot pnpm exec tsx client/tools/verify-server-pvp.ts
+PETBATTLE_API_URL=http://127.0.0.1:3105 VERIFY_SCENARIO=replay pnpm exec tsx client/tools/verify-server-pvp.ts
 
 # 重新生成占位图
 node client/tools/gen-placeholders.mjs
@@ -177,7 +185,9 @@ ART_SPEC §8.3：基础尺寸色块 + 1px 描边 + 文字标签（文字用 Labe
 
 - mock：PvE 完整流程、繁殖、PvP 全链路（防守→匹配→fight→结果→回放→四榜）均可跑。
 - server：已实测 guest 登录、编队保存、PvE start/claim、繁殖 start/claim；M1 阶段放生成功 + 蛋/锁定/最后成年拒绝。
-- **M2-A（本批）**：UI kit/三态/安全区、构建固定、宠物列表虚拟化、改名、编队组件、PvP 页面与 mock 已完成；
-  **M2-B** 待 C 的 `/pvp/*` 与 `/leaderboard` 合并后做真实接口两账号验收、web-mobile/wechatgame 构建与真机冒烟。
-- 列表虚拟化：PetList / 防守/编队选择只实例化视口内的行，40+ 只节点数受控。
+- **M2-A/B（本批）**：UI kit/三态/安全区、构建固定、列表虚拟化、改名、编队组件、PvP 五页已完成；
+  server 模式已接通 `/pvp/*` 与 `/leaderboard`，两账号验收（防守→匹配→fight→回放→四榜、B 反打 A、机器人兜底、日报/快照/回放 TTL）通过。
+- 列表虚拟化：PetList / 防守/编队选择只实例化视口内的行；40 只时实测仅 4 个 `virtual-row-*` 节点。
+- 构建：debug web-mobile 7.23 MB / wechatgame 6.46 MB；release web-mobile 3.63 MB / wechatgame 3.14 MB（均未压缩）。
+- 限制：本机没有微信开发者工具，WeChat 预览/真机冒烟仍需在有工具的机器上补；`touristappid` 为占位 AppID；release 未压缩包仍大于 2 MB，正式提审前按 M3-06 做压缩/分包。
 - 中文正文使用系统字体在原生分辨率渲染，不做低分辨率像素字（P-021）。
