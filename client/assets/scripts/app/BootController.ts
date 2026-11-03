@@ -3,6 +3,7 @@ import { gotoScene } from './navigation';
 import { bootstrapApp } from '../services/bootstrap';
 import { hexColor, makeLabel, makeNode, makePanel, paint, place } from '../ui/nodes';
 import { preloadPlaceholders } from '../ui/placeholders';
+import { createSafeArea } from '../ui/safeArea';
 import { COLORS, DESIGN, FONT_SIZE } from '../ui/theme';
 
 const { ccclass } = _decorator;
@@ -23,11 +24,12 @@ export class BootController extends Component {
     profiler.hideStats();
 
     const root = makeNode('boot-root', this.node, DESIGN.width, DESIGN.height);
-    const title = makeLabel(root, '宠物对决', { fontSize: FONT_SIZE.title, color: COLORS.text });
+    const safe = createSafeArea(root);
+    const title = makeLabel(safe, '宠物对决', { fontSize: FONT_SIZE.title, color: COLORS.text });
     place(title.node, 0, 80);
-    const subtitle = makeLabel(root, 'PetBattle', { fontSize: FONT_SIZE.body, color: COLORS.textDim });
+    const subtitle = makeLabel(safe, 'PetBattle', { fontSize: FONT_SIZE.body, color: COLORS.textDim });
     place(subtitle.node, 0, 20);
-    this.status = makeLabel(root, '初始化中…', { fontSize: FONT_SIZE.body, color: COLORS.accent });
+    this.status = makeLabel(safe, '初始化中…', { fontSize: FONT_SIZE.body, color: COLORS.accent });
     place(this.status.node, 0, -60);
 
     void this.run(root);

@@ -1,8 +1,9 @@
 # client/ —— Cocos Creator 3.8.8 工程（B 会话）
 
 横屏 2D 工程，设计分辨率 **1920×1080**，虚拟像素基准 **640×360**（3× 整数放大）。
-当前 M1 第三批：Boot / Home / PetList / PetDetail / Breeding / Habitat / StageSelect / Battle 八个场景；
-PvE 战斗与繁殖支持 **mock / server 双路径**，UI 流程一致。
+M1 场景：Boot / Home / PetList / PetDetail / Breeding / Habitat / StageSelect / Battle。
+M2 批次 B1 新增：PvpDefense / PvpOpponent / PvpResult / PvpReplay / Leaderboard；
+PvP 为 **mock / server 双路径**，server 已按 contract-v1.6 接通 `/pvp/*` 与 `/leaderboard`。
 
 ## 打开工程
 
@@ -16,18 +17,21 @@ PvE 战斗与繁殖支持 **mock / server 双路径**，UI 流程一致。
 client/
   assets/
     scenes/                  Boot / Home / PetList / PetDetail / Breeding / Habitat / StageSelect / Battle
+                             + PvpDefense / PvpOpponent / PvpResult / PvpReplay / Leaderboard
     scripts/
       app/                   各场景控制器、store、navigation、SceneView 壳
       platform/              wechat / web / steam 适配器；wx.* 只允许出现在这里
-      services/              ApiClient、bootstrap、config、habitat/battle/breeding actions、errors
-      dev/                   DEV_CONFIG、mock profile、本地 clone/rng
-      ui/                    theme / nodes / screens / sceneView / placeholders
+      services/              ApiClient、bootstrap、config、habitat/battle/breeding/pvp actions、errors
+      dev/                   DEV_CONFIG、mock profile、mock PvP、本地 clone/rng、devFaults
+      ui/                    kit / states / safeArea / virtualList / lineupEditor / renameDialog
+                             theme / nodes / screens / sceneView / placeholders
     lib/                     **生成物**：从 packages/core、packages/protocol 同步
     resources/
       config/                **生成物**：从 core/src/config/data 同步的 12 份 JSON
       placeholders/          同尺寸占位图（96×96 宠物/剪影、256×256 立绘、48×48 蛋、32×32 图标）
+  build-templates/           微信构建模板（game.json / project.config.json，UI-04）
   settings/v2/packages/      工程设置（设计分辨率、2D 模块裁剪）
-  tools/                     同步、类型检查、占位图生成、ApiClient 验证
+  tools/                     同步、类型检查、构建固定、占位图生成、ApiClient/PvP 验证
 ```
 
 ## 命令（不进入 pnpm workspace，不碰根 lockfile）
@@ -44,19 +48,42 @@ node client/tools/typecheck.mjs
 # 验证 ApiClient：serverTime 偏移、409 latestProfile 重建、幂等/版本头
 pnpm exec tsx client/tools/verify-api-client.ts
 
-# 验证错误码文案（BATTLE_EXPIRED / EGG_NOT_READY / 放生拒绝等）
+# 验证错误码文案（含 DAILY_LIMIT_REACHED / OPPONENT_UNAVAILABLE / REPLAY_EXPIRED）
 pnpm exec tsx client/tools/verify-errors.ts
+
+# 验证离线 PvP：防守校验/24h stale、匹配、真实事件流、回放、日报、Elo、四榜
+pnpm exec tsx client/tools/verify-pvp.ts
+
+# 真实服务端两账号验收（需先起服务端；默认 http://127.0.0.1:3101）
+pnpm exec tsx client/tools/verify-server-pvp.ts
+# 边界场景（各起一个对应环境变量的干净内存服务端）：
+PETBATTLE_API_URL=http://127.0.0.1:3102 VERIFY_SCENARIO=bot pnpm exec tsx client/tools/verify-server-pvp.ts
+PETBATTLE_API_URL=http://127.0.0.1:3103 VERIFY_SCENARIO=daily pnpm exec tsx client/tools/verify-server-pvp.ts
+PETBATTLE_API_URL=http://127.0.0.1:3104 VERIFY_SCENARIO=snapshot pnpm exec tsx client/tools/verify-server-pvp.ts
+PETBATTLE_API_URL=http://127.0.0.1:3105 VERIFY_SCENARIO=replay pnpm exec tsx client/tools/verify-server-pvp.ts
 
 # 重新生成占位图
 node client/tools/gen-placeholders.mjs
 
-# 构建（CLI；退出码 36 表示成功）
-# 必须带 startScene=<Boot uuid>，否则新增场景会改变默认启动场景（P-118）
-"C:/ProgramData/cocos/editors/Creator/3.8.8/CocosCreator.exe" \
-  --project "D:/github-mine/petbattle-client/client" \
-  --build "platform=wechatgame;debug=true;startScene=a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
-# 预览可把 platform 换成 web-mobile，产物在 client/build/<platform>/
+# 构建（固定参数 + 后处理；P-118/P-123）
+node client/tools/build.mjs --platform=wechatgame --debug
+node client/tools/build.mjs --platform=web-mobile --debug
+# 只对已有产物做后处理/校验（不跑 Cocos）
+node client/tools/build.mjs --platform=wechatgame --postprocess-only=client/build/wechatgame
 ```
+
+### 构建固定项（UI-04 / P-123）
+
+`build.mjs` 不再依赖手工改产物：
+
+| 项 | 固定值 |
+|---|---|
+| `startScene` | Boot 场景 uuid `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`（Cocos 3.8.8 CLI 不认 `db://` 路径，实测会回退到 Battle；P-118） |
+| 微信 `game.json` | `deviceOrientation=landscape`、`showStatusBar=false` |
+| 微信 `project.config.json` | 模板 `build-templates/wechatgame/project.config.json`；AppID 默认 `touristappid`，`setting.urlCheck=false` |
+| 校验 | 产物 `src/settings.json` 的 `launchScene` 必须包含 `Boot.scene`，否则退出 1 |
+
+换正式 AppID 只改模板里的 `appid`；`client/build/**` 是产物，不作为基线。
 
 ## 约束
 
@@ -89,8 +116,13 @@ node client/tools/gen-placeholders.mjs
 | PetDetail | `PetDetailController` | deriveStats 八项属性、基因、显性/隐性特质、血统、相性/克制、技能 |
 | Breeding | `BreedingController` | 双亲、基因区间、近亲警告、成本、产蛋、孵化倒计时、领取 |
 | Habitat | `HabitatController` | 槽位、收取/喂食/清洁/陪玩/升级/移出 |
-| StageSelect | `StageSelectController` | 关卡解锁、敌方与克制、编队、开战 |
+| StageSelect | `StageSelectController` | 关卡解锁、敌方与克制、编队（复用 `ui/lineupEditor`）、开战 |
 | Battle | `BattleController` | BattleEngine 本地演出、手动/自动指令、结算 |
+| PvpDefense | `PvpDefenseController` | 防守 1~3 只、快照时间/24h、stale、保存 |
+| PvpOpponent | `PvpOpponentController` | 对手概览、isBot 标记、剩余次数、刷新、更换编队、开战 |
+| PvpResult | `PvpResultController` | 胜负/平、回合数、双方 rating 变化、replayId；错误码分支 |
+| PvpReplay | `PvpReplayController` | 只播 events；播放/暂停/倍速/跳到结算 |
+| Leaderboard | `LeaderboardController` | 段位/图鉴/最佳基因/世代四 tab、前 N + self |
 
 - 场景 Canvas 上各挂一个控制器组件；组件 `__type__` 是脚本 meta uuid 的 **23 位**压缩 class id（P-113）。
 - 修改场景建议用编辑器保存，避免手写 id 不一致。
@@ -109,17 +141,25 @@ node client/tools/gen-placeholders.mjs
   - server `POST /breeding/start|claim` → `applyProfilePatch`；
   - mock `startBreeding` / `claimBreeding`；蛋到 `bornAt + hatchMs` 后调 `advanceProfile` 一次。
 - `BreedingController` 的倒计时按**客户端配置**的 hatchMs 计算；正式环境两端 contentVersion 应一致。
-- `services/petActions.ts`：放生/锁定。
+- `services/petActions.ts`：放生/锁定/改名。
+  - 改名前本地校验 1~12 字与字符集（`services/petName.ts`），服务端模式调 `/pets/:id/rename`；
   - 放生前置：蛋 / 锁定 / 编队 / 防守 / 最后一只成年本地先提示；栖息地中的宠物由动作自动 `/habitat/move` 移出后再放生；
   - 服务端模式仍会发一次请求，展示 `EGG_NOT_RELEASABLE` / `PET_LOCKED` / `PET_IN_USE` / `LAST_ADULT` 的权威错误；
   - 二次确认展示预计返还基因尘（core 计算），成功后 `applyProfilePatch`；**core 只返回 refund，离线动作自行入账（P-119）**。
+- `services/pvpActions.ts` + `dev/mockPvp.ts`（contract-v1.6 §7.5）：
+  - server 模式：`GET /pvp/defense`、`POST /pvp/defense`、`GET /pvp/opponent`、`POST /pvp/fight`、`GET /pvp/replay/:id`、`GET /leaderboard`；
+  - mock 模式：防守快照/24h stale、机器人/真人混合匹配、core `buildBattleSetup` + `BattleEngine.autoCommand` 真实模拟、Elo（只在 mock 结算层）、日报 10 次、战报保存 events；
+  - 所有动作带去重 guard；`fight` 失败写入 store，由结果页按 `DAILY_LIMIT_REACHED / OPPONENT_UNAVAILABLE / REPLAY_EXPIRED` 展示；
+  - 回放只读 `replay.events`，不重新模拟、不覆盖结果。
 - `services/localSave.ts`：本地存档缓存（key `petbattle.profile.v1`，`schemaVersion=1`，存 `{ profile, revision, savedAt }`）。
   - 只存 profile，不存 token/密钥；
   - mock 启动优先读本地并 `advanceProfile` 到当前时间；结构异常/schema 不符清理并新建；
   - 时钟回拨导致推进失败时**保留原档**（P-120）；
   - server 登录/同步/409 都会以服务器档覆盖本地；每次 `store.setProfile` 自动写回。
-- 开发故障注入：`localStorage.setItem('petbattle.simulateBattleFault', JSON.stringify('BATTLE_EXPIRED'))`，
-  下一次 PvE 结算会失败并显示「重开」；读取后自动清除（一次性）。
+- 开发故障注入（读取后自动清除，一次性）：
+  - `petbattle.simulateBattleFault`：下一次 PvE 结算失败（`BATTLE_EXPIRED` / `BATTLE_NOT_FOUND` / `VALIDATION_FAILED`）；
+  - `petbattle.simulatePvpFault`：下一次对应 PvP 动作失败（`DAILY_LIMIT_REACHED` / `OPPONENT_UNAVAILABLE` / `REPLAY_EXPIRED` / `PET_IN_USE` / `VALIDATION_FAILED`）；只有匹配的动作会消费（`PET_IN_USE` 同时覆盖编队保存与防守保存），Home 概览不会吞掉故障。
+  - 例：`localStorage.setItem('petbattle.simulatePvpFault', JSON.stringify('DAILY_LIMIT_REACHED'))`。
 
 ## mock / server 切换
 
@@ -143,10 +183,11 @@ ART_SPEC §8.3：基础尺寸色块 + 1px 描边 + 文字标签（文字用 Labe
 
 ## 当前状态与已知限制
 
-- mock：PvE 完整流程（开始→手动/自动→结算→首通奖励/关卡解锁）、繁殖（产蛋→倒计时→领取）均可跑。
-- server：已实测 guest 登录、编队保存、PvE start/claim（服务端重放 33 条指令、8 回合胜利）、繁殖 start/claim。
-- 放生已做服务端成功 + 蛋/锁定/最后成年三种拒绝；「在编队/防守」的拒绝依赖服务端，未单独构造。
-- 列表最多显示 5 只，未做 ScrollView 虚拟化。
-- 编队选择在 StageSelect 内完成（1~3 只、非蛋），服务端模式会先 `POST /lineup/set`。
-- PvP/排行榜/好友不在本批范围；宠物改名 UI 未做（锁定/放生已接）。
+- mock：PvE 完整流程、繁殖、PvP 全链路（防守→匹配→fight→结果→回放→四榜）均可跑。
+- server：已实测 guest 登录、编队保存、PvE start/claim、繁殖 start/claim；M1 阶段放生成功 + 蛋/锁定/最后成年拒绝。
+- **M2-A/B（本批）**：UI kit/三态/安全区、构建固定、列表虚拟化、改名、编队组件、PvP 五页已完成；
+  server 模式已接通 `/pvp/*` 与 `/leaderboard`，两账号验收（防守→匹配→fight→回放→四榜、B 反打 A、机器人兜底、日报/快照/回放 TTL）通过。
+- 列表虚拟化：PetList / 防守/编队选择只实例化视口内的行；40 只时实测仅 4 个 `virtual-row-*` 节点。
+- 构建：debug web-mobile 7.23 MB / wechatgame 6.46 MB；release web-mobile 3.63 MB / wechatgame 3.14 MB（均未压缩）。
+- 限制：本机没有微信开发者工具，WeChat 预览/真机冒烟仍需在有工具的机器上补；`touristappid` 为占位 AppID；release 未压缩包仍大于 2 MB，正式提审前按 M3-06 做压缩/分包。
 - 中文正文使用系统字体在原生分辨率渲染，不做低分辨率像素字（P-021）。

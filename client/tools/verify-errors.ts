@@ -16,6 +16,9 @@ const CASES: Array<{ code: ApiErrorCode; mustContain: string }> = [
   { code: 'PET_IN_USE', mustContain: '使用' },
   { code: 'LAST_ADULT', mustContain: '成年' },
   { code: 'REVISION_CONFLICT', mustContain: '冲突' },
+  { code: 'DAILY_LIMIT_REACHED', mustContain: '次数' },
+  { code: 'OPPONENT_UNAVAILABLE', mustContain: '对手' },
+  { code: 'REPLAY_EXPIRED', mustContain: '战报' },
 ];
 
 let failed = 0;

@@ -20,15 +20,24 @@ import type {
   CollectHabitatRequest,
   CollectHabitatResponse,
   FeedPetRequest,
+  FightPvpRequest,
+  FightPvpResponse,
+  GetPvpDefenseResponse,
+  GetPvpOpponentResponse,
+  GetPvpReplayResponse,
+  LeaderboardQuery,
+  LeaderboardResponse,
   MovePetToHabitatRequest,
   PlayWithPetRequest,
   ProfileWriteResponse,
   ReleasePetResponse,
+  RenamePetRequest,
   RevisionConflictDetails,
   RouteKey,
   SetPetLockRequest,
   SetLineupRequest,
   SetLineupResponse,
+  SetPvpDefenseRequest,
   StartBreedingRequest,
   StartBreedingResponse,
   StartPveBattleRequest,
@@ -69,6 +78,8 @@ export interface CallOptions {
   pathParams?: Record<string, string>;
   /** 重试时复用同一个 key；缺省自动生成。 */
   idempotencyKey?: string;
+  /** 重试时复用首次请求的 baseRevision（服务端幂等指纹包含它）。 */
+  baseRevision?: number;
   /** 显式声明是写操作（默认按 ROUTES 判断）。 */
   write?: boolean;
 }
@@ -185,6 +196,40 @@ export class ApiClient {
     return this.call('releasePet', undefined, { pathParams: { id: petId } });
   }
 
+  renamePet(petId: string, name: string): Promise<ApiResponse<ProfileWriteResponse>> {
+    const req: RenamePetRequest = { name };
+    return this.call('renamePet', req, { pathParams: { id: petId } });
+  }
+
+  // —— PvP / 排行榜（contract-v1.6 §7.5）——
+  getPvpDefense(): Promise<ApiResponse<GetPvpDefenseResponse>> {
+    return this.call('getPvpDefense', undefined);
+  }
+
+  setPvpDefense(req: SetPvpDefenseRequest): Promise<ApiResponse<ProfileWriteResponse>> {
+    return this.call('setPvpDefense', req);
+  }
+
+  getPvpOpponent(): Promise<ApiResponse<GetPvpOpponentResponse>> {
+    return this.call('getPvpOpponent', undefined);
+  }
+
+  fightPvp(
+    req: FightPvpRequest,
+    idempotencyKey?: string,
+    baseRevision?: number,
+  ): Promise<ApiResponse<FightPvpResponse>> {
+    return this.call('fightPvp', req, { idempotencyKey, baseRevision });
+  }
+
+  getPvpReplay(replayId: string): Promise<ApiResponse<GetPvpReplayResponse>> {
+    return this.call('getPvpReplay', undefined, { pathParams: { id: replayId } });
+  }
+
+  getLeaderboard(query: LeaderboardQuery): Promise<ApiResponse<LeaderboardResponse>> {
+    return this.call('getLeaderboard', query);
+  }
+
   // —— 编队 / PvE / 繁殖 ——
   setLineup(req: SetLineupRequest): Promise<ApiResponse<SetLineupResponse>> {
     return this.call('setLineup', req);
@@ -221,7 +266,7 @@ export class ApiClient {
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     if (isWrite) {
       headers[IDEMPOTENCY_KEY_HEADER] = options.idempotencyKey ?? this.nextIdempotencyKey();
-      headers[BASE_REVISION_HEADER] = String(this.getBaseRevision());
+      headers[BASE_REVISION_HEADER] = String(options.baseRevision ?? this.getBaseRevision());
     }
 
     let url = `${this.baseUrl}${path}`;

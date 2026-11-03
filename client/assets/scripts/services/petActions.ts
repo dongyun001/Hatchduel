@@ -7,6 +7,7 @@ import { getConfigRepo } from './config';
 import { apiErrorText, errorMessage } from './errors';
 import type { ActionResult } from './errors';
 import { movePetAction } from './habitatActions';
+import { normalizePetName } from './petName';
 
 /** 放生拒绝原因（本地与服务端共用文案）。 */
 const RELEASE_REASON: Record<string, string> = {
@@ -139,8 +140,7 @@ export async function releasePetAction(petId: string): Promise<ReleaseActionResu
   }
 }
 
-/** 锁定/解锁：只改标记位，不推进时间。 */
-export async function setPetLockAction(petId: string, locked: boolean): Promise<LockActionResult> {
+/** 锁定/解锁：只改标记位，不推进时间。 */export async function setPetLockAction(petId: string, locked: boolean): Promise<LockActionResult> {
   const profile = appStore.getState().profile;
   if (!profile || !profile.pets[petId]) return { ok: false, message: '宠物不存在' };
 
@@ -161,4 +161,31 @@ export async function setPetLockAction(petId: string, locked: boolean): Promise<
   pet.locked = locked;
   appStore.setProfile(next);
   return { ok: true, message: locked ? '已锁定（离线演示）' : '已解锁（离线演示）', locked };
+}
+
+/** 改名（UI-06）：本地先校验，服务端模式以 `/pets/:id/rename` 结果为准。 */
+export async function renamePetAction(petId: string, rawName: string): Promise<ActionResult> {
+  const profile = appStore.getState().profile;
+  const pet = profile?.pets[petId];
+  if (!profile || !pet) return { ok: false, message: '宠物不存在' };
+
+  const checked = normalizePetName(rawName);
+  if (!checked.ok) return { ok: false, message: checked.error ?? '名字不合法' };
+
+  if (isServerMode()) {
+    const api = getApiClient();
+    if (!api) return { ok: false, message: '服务端未连接' };
+    const res = await api.renamePet(petId, checked.name);
+    if (!res.ok || !res.data) return { ok: false, message: `改名失败：${apiErrorText(res.error?.code)}` };
+    appStore.setProfile(applyProfilePatch(profile, res.data.patch));
+    return { ok: true, message: `已改名为「${checked.name}」` };
+  }
+
+  const next = cloneProfile(profile);
+  const target = next.pets[petId];
+  if (!target) return { ok: false, message: '宠物不存在' };
+  target.name = checked.name;
+  target.updatedAt = nowMs();
+  appStore.setProfile(next);
+  return { ok: true, message: `已改名为「${checked.name}」（离线演示）` };
 }

@@ -1,4 +1,10 @@
 import type { BattleSetup, Profile } from '../../lib/core';
+import type {
+  ApiErrorCode,
+  FightPvpResponse,
+  PvpDefenseInfo,
+  PvpOpponentSummary,
+} from '../../lib/protocol';
 import type { PlatformKind } from '../platform';
 import { saveLocalProfile } from '../services/localSave';
 
@@ -6,7 +12,20 @@ import { saveLocalProfile } from '../services/localSave';
  * 单向数据流：UI 只读 `appStore.getState()`，动作通过 service 改 store。
  * 不引入状态机；服务端返回 `ProfilePatch` 时由 service 合并后整体写回。
  */
-export type ScreenId = 'boot' | 'home' | 'habitat' | 'petList' | 'petDetail' | 'breeding' | 'stageSelect' | 'battle';
+export type ScreenId =
+  | 'boot'
+  | 'home'
+  | 'habitat'
+  | 'petList'
+  | 'petDetail'
+  | 'breeding'
+  | 'stageSelect'
+  | 'battle'
+  | 'pvpDefense'
+  | 'pvpOpponent'
+  | 'pvpResult'
+  | 'pvpReplay'
+  | 'leaderboard';
 
 /** 宠物列表筛选（阶段维度）。 */
 export type PetFilter = 'all' | 'adult' | 'juvenile' | 'egg';
@@ -42,13 +61,54 @@ export interface BattleSessionState {
   partyPetIds: string[];
 }
 
+/** PvP 概览：Home 入口与防守/对手页共用。 */
+export interface PvpOverviewState {
+  defense: PvpDefenseInfo | null;
+  challengesRemaining: number | null;
+  dailyLimit: number | null;
+  seasonId: string | null;
+  loading: boolean;
+  error: string | null;
+  loadedAt: number | null;
+}
+
+export interface PvpErrorState {
+  code?: ApiErrorCode;
+  message: string;
+}
+
+export interface PvpSessionState {
+  overview: PvpOverviewState;
+  lastFight: FightPvpResponse | null;
+  lastOpponent: PvpOpponentSummary | null;
+  replayId: string | null;
+  error: PvpErrorState | null;
+}
+
 export interface AppState {
   platformKind: PlatformKind | null;
   profile: Profile | null;
   remote: RemoteState;
   ui: UiState;
   battle: BattleSessionState | null;
+  pvp: PvpSessionState;
 }
+
+const initialPvp: PvpSessionState = {
+  overview: {
+    defense: null,
+    challengesRemaining: null,
+    dailyLimit: null,
+    seasonId: null,
+    loading: false,
+    error: null,
+    loadedAt: null,
+  },
+  lastFight: null,
+  lastOpponent: null,
+  replayId: null,
+  error: null,
+};
 
 const initialState: AppState = {
   platformKind: null,
@@ -67,6 +127,7 @@ const initialState: AppState = {
     petFilter: 'all',
   },
   battle: null,
+  pvp: initialPvp,
 };
 
 type Listener = (state: Readonly<AppState>) => void;
@@ -124,6 +185,29 @@ class Store {
 
   setBattle(battle: BattleSessionState | null): void {
     this.update((prev) => ({ ...prev, battle }));
+  }
+
+  setPvpOverview(overview: Partial<PvpOverviewState>): void {
+    this.update((prev) => ({ ...prev, pvp: { ...prev.pvp, overview: { ...prev.pvp.overview, ...overview } } }));
+  }
+
+  setPvpOpponent(lastOpponent: PvpOpponentSummary | null): void {
+    this.update((prev) => ({ ...prev, pvp: { ...prev.pvp, lastOpponent } }));
+  }
+
+  setLastFight(lastFight: FightPvpResponse): void {
+    this.update((prev) => ({
+      ...prev,
+      pvp: { ...prev.pvp, lastFight, replayId: lastFight.replayId, error: null },
+    }));
+  }
+
+  setPvpError(error: PvpErrorState | null): void {
+    this.update((prev) => ({ ...prev, pvp: { ...prev.pvp, error } }));
+  }
+
+  clearPvpResult(): void {
+    this.update((prev) => ({ ...prev, pvp: { ...prev.pvp, lastFight: null, error: null } }));
   }
 
   reset(): void {

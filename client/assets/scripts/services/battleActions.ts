@@ -1,7 +1,7 @@
 import { applyProfilePatch, applyPveRewards, buildPveBattleSetup, runBattle } from '../../lib/core';
 import type { BattleSetup, Command, PetInstance, PveRewards, Profile, StageConfig } from '../../lib/core';
 import { appStore } from '../app/store';
-import { takeSimulatedBattleFault } from '../dev/devFaults';
+import { takeSimulatedBattleFault, takeSimulatedPvpFaultFor } from '../dev/devFaults';
 import type { BattleSessionState } from '../app/store';
 import { getApiClient, nowMs } from './bootstrap';
 import { getConfigRepo } from './config';
@@ -58,6 +58,8 @@ export function eligibleParty(profile: Profile): PetInstance[] {
 export async function saveLineup(petIds: readonly string[]): Promise<ActionResult> {
   const profile = profileOrNull();
   if (!profile) return { ok: false, message: '没有存档' };
+  const fault = await takeSimulatedPvpFaultFor(['PET_IN_USE', 'VALIDATION_FAILED']);
+  if (fault) return { ok: false, message: `保存编队失败：${apiErrorText(fault)}` };
   if (petIds.length === 0 || petIds.length > 3) return { ok: false, message: '编队需要 1~3 只宠物' };
   for (const id of petIds) {
     const pet = profile.pets[id];

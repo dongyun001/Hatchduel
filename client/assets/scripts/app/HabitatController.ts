@@ -12,7 +12,8 @@ import {
 } from '../services/habitatActions';
 import { COLORS, FONT_SIZE } from '../ui/theme';
 import { makeButton, makeLabel, makePanel, paint, place } from '../ui/nodes';
-import { createPetCard, createTitle, formatAmount, stageName, speciesName } from '../ui/screens';
+import { createPetCard } from '../ui/kit';
+import { createTitle, formatAmount, stageName, speciesName } from '../ui/screens';
 import { SceneView } from '../ui/sceneView';
 import type { PlaceholderFrames } from '../ui/placeholders';
 import type { AppState } from './store';

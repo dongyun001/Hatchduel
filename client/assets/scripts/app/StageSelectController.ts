@@ -5,9 +5,11 @@ import type { AppState } from './store';
 import { getConfigRepo } from '../services/config';
 import { eligibleParty, saveLineup, startBattle } from '../services/battleActions';
 import type { PetInstance, StageConfig, StageProgress } from '../../lib/core';
-import { COLORS, DESIGN, FONT_SIZE, SPRITE_SIZE } from '../ui/theme';
-import { makeButton, makeLabel, makePanel, makeSprite, paint, place } from '../ui/nodes';
-import { createTitle, elementName, elementTint, genderMark, speciesName, stageName } from '../ui/screens';
+import { COLORS, FONT_SIZE } from '../ui/theme';
+import { createButton, renderToast } from '../ui/kit';
+import { createLineupStrip, toggleLineupSelection } from '../ui/lineupEditor';
+import { makeLabel, makePanel, paint, place } from '../ui/nodes';
+import { createTitle, elementName, speciesName } from '../ui/screens';
 import { SceneView } from '../ui/sceneView';
 import type { PlaceholderFrames } from '../ui/placeholders';
 
@@ -70,10 +72,21 @@ export class StageSelectController extends Component {
     });
     place(lineupLabel.node, -780, 368);
 
-    eligible.slice(0, 5).forEach((pet, index) => {
-      this.renderLineupChip(root, frames, pet, index);
+    const strip = createLineupStrip(root, {
+      pets: eligible,
+      selected: this.selectedLineup,
+      frames,
+      visible: 5,
+      onToggle: (petId) => this.toggleLineup(petId),
     });
-    const save = makeButton(root, '保存编队', 180, 64, frames.white, () => void this.onSaveLineup());
+    place(strip, -220, 360);
+    const save = createButton(root, frames, {
+      text: '保存编队',
+      width: 180,
+      height: 64,
+      variant: 'primary',
+      onClick: () => void this.onSaveLineup(),
+    });
     place(save, 780, 360);
 
     // —— 关卡列表 ——
@@ -114,25 +127,32 @@ export class StageSelectController extends Component {
     const stage = stages.find((item) => item.id === this.selectedStageId) ?? stages[0];
     this.renderDetail(root, frames, stage, eligible, profile.stageProgress);
 
-    const back = makeButton(root, '返回主页', 380, 84, frames.white, () => gotoScene('home'));
+    const back = createButton(root, frames, {
+      text: '返回主页',
+      width: 380,
+      height: 84,
+      variant: 'secondary',
+      onClick: () => gotoScene('home'),
+    });
     place(back, -420, -450);
-    const fight = makeButton(
-      root,
-      '开始战斗',
-      380,
-      84,
-      frames.white,
-      () => void this.onStartFight(stage),
-      SELECTED_TINT,
-    );
+    const fight = createButton(root, frames, {
+      text: '开始战斗',
+      width: 380,
+      height: 84,
+      variant: 'primary',
+      onClick: () => void this.onStartFight(stage),
+    });
     place(fight, 0, -450);
-    const toList = makeButton(root, '宠物列表', 380, 84, frames.white, () => gotoScene('petList'));
+    const toList = createButton(root, frames, {
+      text: '宠物列表',
+      width: 380,
+      height: 84,
+      variant: 'secondary',
+      onClick: () => gotoScene('petList'),
+    });
     place(toList, 420, -450);
 
-    if (state.ui.toast) {
-      const toast = makeLabel(root, state.ui.toast, { fontSize: FONT_SIZE.body, color: COLORS.accent, width: 1500, wrap: true });
-      place(toast.node, 0, -390);
-    }
+    renderToast(root, state.ui.toast, frames);
   }
 
   private ensureSelection(
@@ -162,40 +182,13 @@ export class StageSelectController extends Component {
     this.view?.refresh();
   }
 
-  private renderLineupChip(root: Node, frames: PlaceholderFrames, pet: PetInstance, index: number): void {
-    const selected = this.selectedLineup.includes(pet.id);
-    const chip = makePanel(root, 220, 90);
-    paint(chip, frames.white, selected ? SELECTED_TINT : COLORS.panel);
-    place(chip, -500 + index * 240, 360);
-    chip.on(Node.EventType.TOUCH_END, () => this.toggleLineup(pet.id));
-
-    const icon = makeSprite(
-      chip,
-      this.iconFrame(pet, frames),
-      SPRITE_SIZE.icon32 * DESIGN.pixelScale,
-      SPRITE_SIZE.icon32 * DESIGN.pixelScale,
-      elementTint(pet.elementId),
-    );
-    place(icon.node, -58, 0);
-    const label = makeLabel(chip, `${speciesName(pet.speciesId)} ${genderMark(pet.gender)}\n${stageName(pet.stage)} Lv.${pet.level}`, {
-      fontSize: 15,
-      color: COLORS.text,
-      width: 130,
-      height: 52,
-      wrap: true,
-    });
-    place(label.node, 42, 0);
-  }
-
   private toggleLineup(petId: string): void {
-    if (this.selectedLineup.includes(petId)) {
-      this.selectedLineup = this.selectedLineup.filter((id) => id !== petId);
-    } else if (this.selectedLineup.length >= 3) {
-      appStore.setToast('编队最多 3 只，先取消一只');
+    const result = toggleLineupSelection(this.selectedLineup, petId, 3);
+    if (!result.ok) {
+      appStore.setToast(result.reason ?? '编队已满');
       return;
-    } else {
-      this.selectedLineup = [...this.selectedLineup, petId];
     }
+    this.selectedLineup = result.ids;
     this.view?.refresh();
   }
 
@@ -313,12 +306,5 @@ export class StageSelectController extends Component {
       wrap: true,
     });
     place(hint.node, 0, -235);
-  }
-
-  private iconFrame(pet: PetInstance, frames: PlaceholderFrames) {
-    if (pet.speciesId === 'turtle') return frames.petTurtle;
-    if (pet.speciesId === 'fish') return frames.petFish;
-    if (pet.speciesId === 'frog') return frames.petFrog;
-    return frames.silhouette;
   }
 }

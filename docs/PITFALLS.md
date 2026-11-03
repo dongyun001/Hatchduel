@@ -716,6 +716,17 @@
 - **验证**：删除 `client/build/**` 后重新构建，脚本打印 `launchScene=db://assets/scenes/Boot.scene`；改回 `db://` 参数会触发脚本的 launchScene 断言失败。
 - **关联**：P-118、P-123、`client/tools/build.mjs`、`docs/CONTRACT.md` §2.3。
 
+### P-126 客户端源码里的 `[...Set]` 被 Cocos loose spread 编译成 `[Set]`
+
+- **日期**：2026-11-03
+- **发现者/会话**：B 客户端（M2-B 真实服务端验收）
+- **范围**：client
+- **现象**：PvP 更换编队弹窗出现游离的 `[object Set]` 文本，`lineupSelected` 长度变成 1，保存后编队不合法；Node/tsx 与 `typecheck.mjs` 均正常。
+- **原因**：P-116 同类问题从 `assets/lib` 扩展到了客户端源码：`this.lineupSelected = [...allowed]` 中 `allowed` 是 `Set`，Cocos 构建把 spread 编译成 `[].concat(new Set(allowed))`，数组里放的是 Set 本身。
+- **规避**：客户端源码禁止对 `Set`/`Map` 使用 spread，统一 `Array.from(set)`；`sync-lib.mjs` 只改写 `assets/lib`，不会处理 `assets/scripts`。
+- **验证**：构建产物里搜索 `[].concat(new Set(`；PvP 更换编队显示 3 只已选、保存后可正常 fight。
+- **关联**：P-116、`client/assets/scripts/app/PvpOpponentController.ts`、`client/tools/sync-lib.mjs`。
+
 ---
 
 ## 3. 按领域的检查清单
@@ -810,3 +821,4 @@
 | v1.12 | 2026-11-01 | 追加 P-122（P-121 修复：放生清理 breeding.eggs，server patch 下发） |
 | v1.13 | 2026-11-02 | 追加 P-123/P-124（构建配置漂移；Node 直跑校验脚本的扩展名坑） |
 | v1.14 | 2026-11-02 | 追加 P-125（Cocos 3.8.8 CLI 只认 startScene uuid，db:// 被忽略） |
+| v1.15 | 2026-11-03 | 追加 P-126（客户端源码 `[...Set]` 被 loose spread 编译成 `[Set]`） |
