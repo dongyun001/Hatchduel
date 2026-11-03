@@ -31,7 +31,6 @@ const FILTERS: Array<{ id: PetFilter; label: string }> = [
   { id: 'egg', label: '蛋' },
 ];
 
-const SELECTED_TINT = '#2f5a70';
 const ROW_HEIGHT = 132;
 const GENE_KEYS = ['hp', 'atk', 'def', 'spd'] as const;
 const GENE_NAMES: Record<(typeof GENE_KEYS)[number], string> = {

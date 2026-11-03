@@ -1,4 +1,4 @@
-import { Node, UITransform } from 'cc';
+import { type Node, UITransform } from 'cc';
 import type { ApiErrorCode } from '../../lib/protocol';
 import { apiErrorText } from '../services/errors';
 import { createButton, createPanel, createTag } from './kit';

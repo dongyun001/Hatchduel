@@ -1,5 +1,4 @@
 import { _decorator, Component, type Node } from 'cc';
-import { appStore } from './store';
 import { gotoScene } from './navigation';
 import type { AppState } from './store';
 import { loadLeaderboard } from '../services/pvpActions';

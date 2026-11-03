@@ -1,4 +1,4 @@
-import { Node, type Label, type SpriteFrame } from 'cc';
+import { type Node, type Label, type SpriteFrame } from 'cc';
 import type { ElementId, PetInstance } from '../../lib/core';
 import { COLORS, FONT_SIZE, DESIGN } from './theme';
 import type { PlaceholderFrames } from './placeholders';

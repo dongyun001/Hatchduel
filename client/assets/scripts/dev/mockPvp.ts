@@ -304,11 +304,6 @@ export async function mockGetOpponent(
   };
 }
 
-interface SyntheticTeam {
-  pets: PetInstance[];
-  rating: number;
-}
-
 function elementForSpecies(cfg: ConfigRepo, speciesId: string): ElementId {
   const species = cfg.species(speciesId);
   return (species.habitatTags[0] ?? 'water') as ElementId;

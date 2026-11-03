@@ -1,4 +1,4 @@
-import { Color, EventTouch, Node, UITransform, Vec3 } from 'cc';
+import { Color, type EventTouch, Node, UITransform, Vec3 } from 'cc';
 import { makeNode, paint, place } from './nodes';
 import type { PlaceholderFrames } from './placeholders';
 

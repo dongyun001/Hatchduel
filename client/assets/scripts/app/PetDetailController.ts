@@ -307,7 +307,6 @@ ${moveText}${refundText}
   }
 
   private ancestryText(pet: PetInstance, profile: Profile): string {
-    const cfg = getConfigRepo();
     const nameOf = (id: string): string => {
       const found = profile.pets[id];
       return found ? petDisplayName(found) : id;

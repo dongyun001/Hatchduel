@@ -1,4 +1,4 @@
-import { BlockInputEvents, Color, EditBox, Label, Node, UITransform } from 'cc';
+import { BlockInputEvents, Color, EditBox, Label, type Node, UITransform } from 'cc';
 import type { ActionResult } from '../services/errors';
 import { PET_NAME_MAX, normalizePetName } from '../services/petName';
 import { createButton, createPanel } from './kit';

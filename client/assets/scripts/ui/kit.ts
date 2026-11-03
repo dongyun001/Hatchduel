@@ -1,4 +1,4 @@
-import { BlockInputEvents, Button, Label, Node, UITransform, type SpriteFrame } from 'cc';
+import { BlockInputEvents, Button, type Label, Node, UITransform, type SpriteFrame } from 'cc';
 import { COLORS, FONT_SIZE, SPRITE_SIZE } from './theme';
 import { clearChildren, makeLabel, makeNode, makePanel, makeSprite, paint, place } from './nodes';
 import {

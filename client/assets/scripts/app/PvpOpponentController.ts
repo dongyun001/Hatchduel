@@ -1,4 +1,4 @@
-import { _decorator, BlockInputEvents, Component, Node } from 'cc';
+import { _decorator, BlockInputEvents, Component, type Node } from 'cc';
 import { appStore } from './store';
 import { gotoScene } from './navigation';
 import type { AppState } from './store';
