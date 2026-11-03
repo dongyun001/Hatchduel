@@ -930,7 +930,23 @@ Postgres 迁移与 docker-compose 已就绪。其余端点仍返回 404。
 | 已知 | 回放无后台清理（靠 expiresAt）；换季只做 rating 软重置、不清日报/ranked（M2 不切季）；跨实例并发依赖 CAS/409 |
 | 后续 | B 任务 B：切真实接口、两账号验收、构建/真机；M3 评估 Redis 榜、赛季配置外置、回放清理 |
 
-### 11.16 B 任务 A 预验收（2026-11-02，分支 `m2/b-client`，未合并）
+### 11.18 B M2 批次与 M2 验收（2026-11-03）
+
+| 项 | 结果 |
+|---|---|
+| 真实接口 | 五个 PvP/榜单页面在 server 模式全部走 `ROUTES`/ApiClient；`mockPvp` 只在 `remote.mode === 'mock'` 分支执行 |
+| 两账号 | A/B 各设防守与出战；A 匹配 B → fight → 回放 → 四榜；B 反打 A；双方 rating/stats/ranked 正确；机器人不计分、不进榜 |
+| 幂等/409 | 同 `Idempotency-Key` + `baseRevision` 重放返回同一 replayId、次数不变；409 用 latestProfile 重建，结果页改为重新匹配 |
+| 边界 | 429 `DAILY_LIMIT_REACHED`、410 `REPLAY_EXPIRED`、快照 stale、机器人、打自己/不存在对手、空防守、`PET_IN_USE` 均有真实服务端用例 |
+| 构建 | web-mobile debug 7.23MB / wechatgame debug 6.46MB；release 3.63MB / 3.14MB；`launchScene=Boot`、横屏、`urlCheck=false`、AppID=游客占位 |
+| UI 欠账 | 40 宠物列表只实例化 4 个行节点；改名空/非法/成功三态；编队组件在 StageSelect/防守/更换编队共用 |
+| 修复 | P-126（`[...Set]` 被 Cocos loose spread 编译成 `[Set]`）；回放/虚拟列表视口、筛选与面板重叠、标题/属性重叠、EditBox 游离 label |
+| 合并清理 | 0 号合并后修 6 处 type-import + 4 处未使用变量；根 `pnpm lint` 全绿 |
+| 测试 | 根 539（535 passed / 4 skipped）；客户端 `sync-lib --check`、`typecheck`、`verify-errors`（12 码）、`verify-api-client`、`verify-pvp`、`verify-server-pvp`（真实服务端 13 项）全部通过 |
+| 已知 | 微信预览/真机未跑（本机无开发者工具）；AppID 仍 `touristappid`；release 微信包 3.14MB 仍高于 2MB（M3-06）；服务端无 CORS，web 真实接口需同源代理或微信端；429/409/410 未逐张截图 |
+| 结论 | **M2 功能验收通过**：两账号异步 PvP、战报回放、段位变化、四榜；tag `m2` |
+
+### 11.16 B 任务 A 预验收（2026-11-02，分支 `m2/b-client`，已合并，见 §11.18）
 
 | 项 | 结果 |
 |---|---|
