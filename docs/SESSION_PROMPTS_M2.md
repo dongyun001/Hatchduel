@@ -258,6 +258,88 @@ B. C 合并后（0 号通知）：PvP 页面切真实接口、两账号验收、
 
 ---
 
+### 3.1 B 任务 B 续跑提示词（A/C 已合并后）
+
+> 当前 main 已含 A/C；B 分支已合并 main 并同步 core。复制下面整段给 B 会话。
+
+```
+你继续 PetBattle 的 B 客户端任务 B（contract-v1.6，A/C 已合并）。
+
+工作目录：D:\github-mine\petbattle-client
+分支：m2/b-client
+开工先跑：git status（必须干净）、git log -1（应能看到 main 的 merge）：
+  node client/tools/sync-lib.mjs --check   # 应通过
+如果 check 失败，先 node client/tools/sync-lib.mjs 再继续。
+
+背景（已完成）：
+- A 的 core PvP 辅助（createRng/buildDefenseSnapshot/buildPvpBattleSetup/applyPvpOutcome）已在 main；
+- C 的 /pvp/defense（POST/GET）、/pvp/opponent、/pvp/fight、/pvp/replay/:id、/leaderboard 已合并；
+- 你上一批的 UI kit、三态、安全区、构建固定、PvP 五个 mock 页面已提交在 m2/b-client；
+- 合并顺序是 A → C → B，本批完成后由 0 号合并，你不要自行合 main。
+
+只改：client/**（除 client/assets/art/**、client/assets/audio/**）。
+不要改：packages/**、server/**、根配置/CI、docs/CONTRACT.md、AGENTS.md、docs/PRD.md。
+需要协议/服务端变更时停下来写变更请求，不要私改。
+
+开工前读：
+1. docs/CONTRACT.md §7.5（F-01~F-11）、§11.16、§11.17
+2. docs/SESSION_PROMPTS_M2.md 本段
+3. docs/UI_BACKLOG.md（M2-01~M2-09）
+4. docs/PITFALLS.md P-103、P-116~P-125
+5. client/README.md、client/tools/build.mjs、client/assets/scripts/services/{apiClient,pvpActions,errors}.ts
+
+本批任务（全部完成再交付）：
+1. 真实接口接线
+   - 保留 DEV mock 开关；server 模式下 PvP 五个页面只走 ROUTES/ApiClient，不再走 mockPvp。
+   - 确认不再有页面直接调用 mockPvp；mockPvp 只允许在 mock 模式使用。
+   - 处理 409（latestProfile 重建）、429 DAILY_LIMIT_REACHED、409 OPPONENT_UNAVAILABLE、
+     410 REPLAY_EXPIRED、PET_IN_USE（编队/防守）；请求在途禁用重复点击。
+2. 两账号验收（真实服务端）
+   - 账号 A：客户端（微信开发者工具或真机，server 模式），设置防守 + 出战线。
+   - 账号 B：第二实例 / 清存储的新游客 / curl 登录，设置防守 + 出战线。
+   - 跑通：A 防守 → A 匹配到 B（不出现自己）→ fight → 结果页 rating 双方变化 →
+     A 读回放（events 完整、播放/暂停/倍速/跳结算）→ 四人榜（段位/图鉴/基因/世代）前 N+self。
+   - 用 B 再打 A，确认防守方 rating/stats 在下一次 GET /profile 变化。
+   - 机器人兜底：让场上只有一个真人候选，确认 isBot 标记、rating 不变、不计榜。
+   - 快速边界（用环境变量起服务端）：
+     * PETBATTLE_PVP_DAILY_LIMIT=1 → 第 2 次 fight 429；
+     * PETBATTLE_PVP_SNAPSHOT_TTL_MS=1000 → 等待后 GET /pvp/defense stale=true；
+     * PETBATTLE_PVP_REPLAY_TTL_MS=1000 → 等待后回放 410。
+3. 构建与真机
+   - 只用 node client/tools/build.mjs；不要手写 startScene=db://...（P-125）。
+   - web-mobile + wechatgame 构建；记录包体（debug/release 分开）。
+   - 微信预览/真机：横屏、AppID（模板内 touristappid 占位）、urlCheck=false、launchScene=Boot。
+   - 备注：服务端没有 CORS；浏览器 web-mobile 直连 127.0.0.1:3000 会被拦。
+     真实接口验收用微信开发者工具/真机，或临时本地同源代理；不要改 server/**。
+   - 本地可用 storage 覆盖：petbattle.useServer=true、petbattle.apiBaseUrl=http://<LAN-IP>:3000；
+     正式包/提交前确认 DEV_CONFIG 仍是 useServer=false。
+4. 补上批欠账
+   - PetList 虚拟列表与改名 UI 的视觉/交互验收（上次被 IAB splash 卡住）：
+     用干净浏览器会话或微信开发者工具；40+ 宠物的列表节点数受控；改名 1~12 字/非法字符提示。
+   - 防守/编队选择共用组件在两处都可用。
+5. 验收命令
+   - node client/tools/sync-lib.mjs --check
+   - node client/tools/typecheck.mjs
+   - pnpm exec tsx client/tools/verify-errors.ts
+   - pnpm exec tsx client/tools/verify-api-client.ts
+   - pnpm exec tsx client/tools/verify-pvp.ts
+   - node client/tools/build.mjs --platform=web-mobile --debug
+   - node client/tools/build.mjs --platform=wechatgame --debug
+   - 如做 release，再跑一次 --release 并记录包体。
+
+服务端启动（在 D:\github-mine\petbattle 主仓库，不要在 client 里改 server）：
+  # Postgres（petbattle-db-1 已在 127.0.0.1:5433 运行；3000 端口已释放）
+  DATABASE_URL=postgres://petbattle:petbattle@127.0.0.1:5433/petbattle PETBATTLE_STORE=postgres PORT=3000 pnpm dev
+  # 或内存
+  PETBATTLE_STORE=memory PORT=3101 pnpm dev
+
+交付报告按 AGENTS.md §7：完成内容/改动文件/接口变化/测试与验证/未决问题/下一步。
+必须写清：真实接口两账号证据、web/微信构建参数与包体、仍未闭合的项。
+不要自行合并到 main；0 号负责合并。
+```
+
+---
+
 ## 4. D —— 内容与数值（可选，暂不启动）
 
 只有出现“机器人阵容/赛季/榜位需要数据化”时才开，否则 M2 不动 D。
