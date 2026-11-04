@@ -729,6 +729,20 @@
 
 ---
 
+### P-127 微信开发者工具预览受 4MB source 限制；`minified=false` 会让 3.1MB 包报 8.9MB
+
+- **日期**：2026-11-04
+- **发现者/会话**：0 Lead（微信预览补验收）
+- **范围**：client / build / wechat
+- **现象**：debug 微信包 6.46MB，`preview` 报 `80051 source size 6612KB exceed max limit 4MB`；换成 release 3.14MB 后仍报 `8943KB exceed max limit 4MB`。把 `project.config.json` 的 `minified` 改为 true、关闭 `uploadWithSourceMap` 后，预览总包 3.1MB 成功。
+- **原因**：预览上传的是编译器处理后的源码体积；`minified=false` 时 DevTools 会把 `cocos-js` 等源码重新展开，远超目录原始大小。debug 包本身也超过 4MB。
+- **规避**：微信预览/上传一律用 release 构建；模板 `client/build-templates/wechatgame/project.config.json` 固定 `minified/minifyWXML/minifyWXSS=true`、`uploadWithSourceMap=false`；debug 包只用于本地 IDE 调试。
+- **另一个坑**：删除/重建 `client/build/wechatgame` 时如果 IDE 还开着，会报 `game.json 未找到或读取失败`。先 `cli close --project`，必要时 `cache --clean=all` 或 `quit`，再 `open`/`preview`。
+- **验证**：`node client/tools/build.mjs --platform=wechatgame --release` + `cli preview --qr-format image --qr-output ...`，CLI 汇总 `TOTAL 3.1MB`，生成 mock 与 server 两张二维码。
+- **关联**：P-123/P-125、`client/build-templates/wechatgame/project.config.json`、`client/tools/build.mjs`。
+
+---
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -822,3 +836,4 @@
 | v1.13 | 2026-11-02 | 追加 P-123/P-124（构建配置漂移；Node 直跑校验脚本的扩展名坑） |
 | v1.14 | 2026-11-02 | 追加 P-125（Cocos 3.8.8 CLI 只认 startScene uuid，db:// 被忽略） |
 | v1.15 | 2026-11-03 | 追加 P-126（客户端源码 `[...Set]` 被 loose spread 编译成 `[Set]`） |
+| v1.16 | 2026-11-04 | 追加 P-127（微信预览 4MB 限制；minified 与 IDE 缓存） |

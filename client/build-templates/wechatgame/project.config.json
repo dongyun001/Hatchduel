@@ -9,10 +9,10 @@
     "es6": false,
     "enhance": false,
     "postcss": false,
-    "minified": false,
-    "minifyWXML": false,
-    "minifyWXSS": false,
-    "uploadWithSourceMap": true
+    "minified": true,
+    "minifyWXML": true,
+    "minifyWXSS": true,
+    "uploadWithSourceMap": false
   },
   "condition": {}
 }

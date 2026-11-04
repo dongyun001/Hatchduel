@@ -943,8 +943,20 @@ Postgres 迁移与 docker-compose 已就绪。其余端点仍返回 404。
 | 修复 | P-126（`[...Set]` 被 Cocos loose spread 编译成 `[Set]`）；回放/虚拟列表视口、筛选与面板重叠、标题/属性重叠、EditBox 游离 label |
 | 合并清理 | 0 号合并后修 6 处 type-import + 4 处未使用变量；根 `pnpm lint` 全绿 |
 | 测试 | 根 539（535 passed / 4 skipped）；客户端 `sync-lib --check`、`typecheck`、`verify-errors`（12 码）、`verify-api-client`、`verify-pvp`、`verify-server-pvp`（真实服务端 13 项）全部通过 |
-| 已知 | 微信预览/真机未跑（本机无开发者工具）；AppID 仍 `touristappid`；release 微信包 3.14MB 仍高于 2MB（M3-06）；服务端无 CORS，web 真实接口需同源代理或微信端；429/409/410 未逐张截图 |
+| 已知 | 微信预览已在 §11.19 补跑（QR 已生成），真机扫码待用户；AppID 仍 `touristappid`；release 微信包 3.14MB 仍高于 2MB（M3-06）；服务端无 CORS，web 真实接口需同源代理或微信端；429/409/410 未逐张截图 |
 | 结论 | **M2 功能验收通过**：两账号异步 PvP、战报回放、段位变化、四榜；tag `m2` |
+
+### 11.19 微信预览补验收（2026-11-04）
+
+| 项 | 结果 |
+|---|---|
+| 环境 | 微信开发者工具 2.01.2510280（`E:\微信web开发者工具\cli.bat`），已登录；IDE 端口 25616/19704 |
+| 构建 | `wechatgame --release` 3.14MB；模板固定 `minified/minifyWXML/minifyWXSS=true`、`uploadWithSourceMap=false` 后，预览汇总 `TOTAL 3.1MB` |
+| mock 预览 | `preview` 成功；二维码 `client/build/preview-qr.png` |
+| 真实服务端预览 | 临时把 `DEV_CONFIG.useServer=true`、`apiBaseUrl=http://10.6.33.146:3000` 后构建（源码已还原），memory server 在 0.0.0.0:3000；二维码 `client/build/preview-qr-server.png` |
+| 真机 | 待用户扫码；手机需与 PC 同网（WLAN 10.6.33.146 或以太网 192.168.0.x），Windows 防火墙需放行 3000 |
+| 修复 | P-127：debug 6.46MB 超过微信 4MB 预览限制；release + minified 才能预览；重建 build 目录前先 close/quit IDE，否则 `game.json` 读取失败 |
+| 结论 | 微信开发者工具侧“能打开、能编译、能出预览码”已闭合；真正的手机交互仍待扫码验证 |
 
 ### 11.16 B 任务 A 预验收（2026-11-02，分支 `m2/b-client`，已合并，见 §11.18）
 
