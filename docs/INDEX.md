@@ -26,6 +26,7 @@
 | [CONTRACT.md](./CONTRACT.md) | **contract-v1.6 冻结内容**：protocol/core/配置接口清单、各会话接手点、变更流程、M2 PvP/排行榜口径（§7.5） | A/B/C/D/E 与所有并行会话 |
 | [SESSION_PROMPTS.md](./SESSION_PROMPTS.md) | M0/M1 并行会话启动提示词（历史） | 并行会话 |
 | [SESSION_PROMPTS_M2.md](./SESSION_PROMPTS_M2.md) | **M2 并行会话启动提示词**（A/C/B，可直接粘贴）；会话数量、节奏、合并顺序 | M2 并行会话 |
+| [SESSION_PROMPTS_M3.md](./SESSION_PROMPTS_M3.md) | **M3 并行会话启动提示词**（C/D/E/B，可直接粘贴）；微信登录、正式美术、包体、提审 | M3 并行会话 |
 | [UI_BACKLOG.md](./UI_BACKLOG.md) | UI 欠账：现在修 / M2 / M3；UI kit、三态、安全区、构建配置漂移 | B 与所有做界面的会话 |
 | [HANDOFF_M2.md](./HANDOFF_M2.md) | M1→M2 交接：仓库/契约/缺口/M2 待定项/新 0 启动步骤与会话建议 | 新 0 号与 M2 并行会话 |
 | [AGENTS.md](../AGENTS.md) | AI 工作约定、硬性规则、验收与汇报格式 | AI/维护者 |
@@ -42,7 +43,7 @@
 
 ## 当前状态
 
-- 文档版本：v1.6（M2 功能验收通过，tag `m2`）。
+- 文档版本：v1.7（M3 会话计划与提示词已就绪；M2 tag 已验收）。
 - M0 契约 `contract-v1`（2026-10-28）与 M1 / MVP-A（tag `m1`）已完成。
 - **M2 契约已冻结：contract-v1.6（2026-11-02）**，见 `docs/CONTRACT.md` §7.5：
   防守快照/匹配/双 AI 结算/战报/段位/四榜/日报限流/机器人；协议增量已入库（`GET /pvp/defense` + 3 个错误码）。
@@ -50,7 +51,8 @@
   两账号异步 PvP、战报回放、段位变化、四榜全部跑通，539 测试（Postgres 全链路已验证）。
 - 已知收尾项：微信开发者工具预览已跑（mock/server 两张二维码），真机扫码待用户；微信 release 包 3.14MB 仍高于 2MB（M3-06）；
   AppID 仍为 `touristappid`；服务端无 CORS（web 真实接口需同源代理或微信端）。
-- 下一步：M3 / MVP-C（内容、美术、平衡、微信提审）；M2 的遗留项见 `CONTRACT.md` §11.18。
+- 下一步：按 `docs/SESSION_PROMPTS_M3.md` 开 **C/D/E/B** 四个会话（A 按需），合并顺序 D → C → E → B；
+  M3 重点是微信登录/内容安全、正式美术音频、包体 ≤2MB、提审与真机。
 - 已定：Demo 免费、像素风、MVP 物种 5 种（龟/鱼/青蛙/猫/蛇）、宠物不死亡可放生、不做主动治疗、性别保留、简体中文、2C2G Demo 服务器、不做转生、实时房间后置、交易后做。
 - 仍待定：正式版商业模式、Steam 首发地区、交易形态、扩容阈值、微信/Steam 登录细节。
 
@@ -75,3 +77,4 @@
 | v1.4 | 2026-11-02 | contract-v1.6（M2 PvP/排行榜）；新增 SESSION_PROMPTS_M2.md、UI_BACKLOG.md；更新当前状态 |
 | v1.5 | 2026-11-02 | A/C M2 批次已合并（539 测试、Postgres 全链路）；B 任务 A 预验收，待真实接口 |
 | v1.6 | 2026-11-03 | B M2 批次合并；两账号 PvP/回放/段位/四榜验收通过；M2 完成，tag `m2` |
+| v1.7 | 2026-11-05 | 新增 SESSION_PROMPTS_M3.md；M3 四会话（C/D/E/B）与合并顺序 |
