@@ -68,8 +68,10 @@ node client/tools/gen-placeholders.mjs
 # 构建（固定参数 + 后处理；P-118/P-123）
 node client/tools/build.mjs --platform=wechatgame --debug
 node client/tools/build.mjs --platform=web-mobile --debug
+# 上传正式号：直接覆盖产物 AppID，不用改模板
+node client/tools/build.mjs --platform=wechatgame --release --appid=wxXXXXXXXXXXXXXXXX
 # 只对已有产物做后处理/校验（不跑 Cocos）
-node client/tools/build.mjs --platform=wechatgame --postprocess-only=client/build/wechatgame
+node client/tools/build.mjs --platform=wechatgame --postprocess-only=client/build/wechatgame --appid=wxXXXXXXXXXXXXXXXX
 ```
 
 ### 构建固定项（UI-04 / P-123）
@@ -80,10 +82,10 @@ node client/tools/build.mjs --platform=wechatgame --postprocess-only=client/buil
 |---|---|
 | `startScene` | Boot 场景 uuid `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`（Cocos 3.8.8 CLI 不认 `db://` 路径，实测会回退到 Battle；P-118） |
 | 微信 `game.json` | `deviceOrientation=landscape`、`showStatusBar=false` |
-| 微信 `project.config.json` | 模板 `build-templates/wechatgame/project.config.json`；AppID 默认 `touristappid`，`setting.urlCheck=false` |
+| 微信 `project.config.json` | 模板 `build-templates/wechatgame/project.config.json`；AppID 默认 `touristappid`，`setting.urlCheck=false`；可用 `--appid=` 覆盖 |
 | 校验 | 产物 `src/settings.json` 的 `launchScene` 必须包含 `Boot.scene`，否则退出 1 |
 
-换正式 AppID 只改模板里的 `appid`；`client/build/**` 是产物，不作为基线。
+正式号上传用 `--appid=wx...` 覆盖即可，模板保持 `touristappid`；`client/build/**` 是产物，不作为基线。
 
 ## 约束
 
@@ -189,5 +191,5 @@ ART_SPEC §8.3：基础尺寸色块 + 1px 描边 + 文字标签（文字用 Labe
   server 模式已接通 `/pvp/*` 与 `/leaderboard`，两账号验收（防守→匹配→fight→回放→四榜、B 反打 A、机器人兜底、日报/快照/回放 TTL）通过。
 - 列表虚拟化：PetList / 防守/编队选择只实例化视口内的行；40 只时实测仅 4 个 `virtual-row-*` 节点。
 - 构建：debug web-mobile 7.23 MB / wechatgame 6.46 MB；release web-mobile 3.63 MB / wechatgame 3.14 MB（均未压缩）。
-- 限制：本机没有微信开发者工具，WeChat 预览/真机冒烟仍需在有工具的机器上补；`touristappid` 为占位 AppID；release 未压缩包仍大于 2 MB，正式提审前按 M3-06 做压缩/分包。
+- 限制：release 未压缩微信包 3.14 MB 仍大于 2 MB，正式提审前按 M3-06 做压缩/分包；`touristappid` 只用于模板，正式上传用 `--appid=`。微信开发者工具预览已跑通（P-127），真机交互待扫码；体验版需在微信后台设版本并加体验成员。
 - 中文正文使用系统字体在原生分辨率渲染，不做低分辨率像素字（P-021）。

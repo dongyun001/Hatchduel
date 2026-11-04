@@ -7,12 +7,14 @@
  *   node client/tools/build.mjs --platform=wechatgame --debug
  *   node client/tools/build.mjs --platform=web-mobile --release
  *   node client/tools/build.mjs --platform=wechatgame --postprocess-only=client/build/wechatgame
+ *   node client/tools/build.mjs --platform=wechatgame --release --appid=wxXXXXXXXXXXXXXXXX
  *
  * 固定项：
  * - startScene 固定为 Boot 场景 uuid（P-118）。实测 Cocos 3.8.8 CLI 的 `startScene`
  *   只认 uuid；传 `db://assets/scenes/Boot.scene` 会被忽略并回退到资源顺序第一个场景。
  * - wechatgame 构建后强制 game.json.deviceOrientation=landscape；
  * - 复制 build-templates/wechatgame/project.config.json（AppID/urlCheck 单源）；
+ *   可用 `--appid=` 覆盖模板里的 touristappid，上传正式号时无需手改产物；
  * - 校验产物 src/settings.json 的 launchScene 是 Boot，不一致直接退出 1；
  * - 构建前默认跑 sync-lib.mjs（--skip-sync 可跳过）。
  */
@@ -37,6 +39,7 @@ function parseArgs(argv) {
     creatorDir: process.env.COCOS_CREATOR_DIR ?? 'C:\\ProgramData\\cocos\\editors\\Creator\\3.8.8',
     buildRoot: join(clientRoot, 'build'),
     project: clientRoot,
+    appid: '',
   };
   for (const arg of argv) {
     if (arg.startsWith('--platform=')) options.platform = arg.slice('--platform='.length);
@@ -47,6 +50,7 @@ function parseArgs(argv) {
     else if (arg.startsWith('--postprocess-only=')) options.postprocessOnly = arg.slice('--postprocess-only='.length);
     else if (arg.startsWith('--creator=')) options.creatorDir = arg.slice('--creator='.length);
     else if (arg.startsWith('--build-root=')) options.buildRoot = resolve(arg.slice('--build-root='.length));
+    else if (arg.startsWith('--appid=')) options.appid = arg.slice('--appid='.length);
     else if (arg === '--help') {
       console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('*/')[0]);
       process.exit(0);
@@ -105,7 +109,7 @@ function readJson(file, fallback) {
   }
 }
 
-function postprocessWechat(outDir) {
+function postprocessWechat(outDir, appid) {
   const templateDir = join(clientRoot, 'build-templates', 'wechatgame');
   const gameTemplate = join(templateDir, 'game.json');
   const projectTemplate = join(templateDir, 'project.config.json');
@@ -118,7 +122,7 @@ function postprocessWechat(outDir) {
 
   if (existsSync(projectTemplate)) {
     const project = readJson(projectTemplate, {});
-    project.appid = project.appid || 'touristappid';
+    project.appid = appid || project.appid || 'touristappid';
     project.projectname = project.projectname || 'PetBattle';
     project.setting = { ...(project.setting ?? {}), urlCheck: false };
     writeFileSync(join(outDir, 'project.config.json'), `${JSON.stringify(project, null, 2)}\n`);
@@ -152,9 +156,9 @@ function verifyLaunchScene(outDir) {
   console.log(`[build] launchScene=${launchScene}`);
 }
 
-function postprocess(platform, outDir) {
+function postprocess(platform, outDir, appid) {
   if (!existsSync(outDir)) throw new Error(`构建产物目录不存在：${outDir}`);
-  if (platform === 'wechatgame') postprocessWechat(outDir);
+  if (platform === 'wechatgame') postprocessWechat(outDir, appid);
   verifyLaunchScene(outDir);
   console.log(`[build] 包体（未压缩）：${formatSize(sumSize(outDir))} · ${outDir}`);
 }
@@ -196,7 +200,7 @@ function main() {
     const outDir = resolve(options.postprocessOnly);
     const platform = options.platform || (outDir.includes('wechatgame') ? 'wechatgame' : 'web-mobile');
     console.log(`[build] 仅后处理：${platform} · ${outDir}`);
-    postprocess(platform, outDir);
+    postprocess(platform, outDir, options.appid);
     return;
   }
 
@@ -211,7 +215,7 @@ function main() {
 
   if (!options.skipPostprocess) {
     const outDir = resolveOutputDir(options.buildRoot, options.platform);
-    postprocess(options.platform, outDir);
+    postprocess(options.platform, outDir, options.appid);
   }
 }
 
