@@ -743,6 +743,17 @@
 
 ---
 
+### P-128 mock 匹配种子只精确到分钟，刷新对手不换人
+
+- **日期**：2026-11-05
+- **发现者/会话**：0 Lead（体验版反馈）
+- **范围**：client / mock
+- **现象**：体验版 mock 模式点“刷新对手”，同一分钟内始终返回同一个训练师；按钮本身有响应。
+- **原因**：`mockGetOpponent` 的种子是 `hash(accountId + floor(now / 60000) + rating + revision)`，同一分钟、同存档必然同结果。
+- **规避**：把匹配 nonce 持久化到 `petbattle.pvp.matchNonce.v1`，每次匹配 +1 并混入种子；`verify-pvp.ts` 增加“同分钟刷新应换人”的断言。
+- **验证**：`pnpm exec tsx client/tools/verify-pvp.ts` 通过；体验版 `0.1.0-m3` 刷新会换训练师。
+- **关联**：`client/assets/scripts/dev/mockPvp.ts`、`client/tools/verify-pvp.ts`、CONTRACT §7.5 F-02。
+
 ## 3. 按领域的检查清单
 
 ### 3.1 core
@@ -837,3 +848,4 @@
 | v1.14 | 2026-11-02 | 追加 P-125（Cocos 3.8.8 CLI 只认 startScene uuid，db:// 被忽略） |
 | v1.15 | 2026-11-03 | 追加 P-126（客户端源码 `[...Set]` 被 loose spread 编译成 `[Set]`） |
 | v1.16 | 2026-11-04 | 追加 P-127（微信预览 4MB 限制；minified 与 IDE 缓存） |
+| v1.17 | 2026-11-05 | 追加 P-128（mock 匹配刷新不换人） |

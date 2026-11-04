@@ -58,6 +58,8 @@ export const MOCK_PVP_KEYS = {
   daily: 'petbattle.pvp.daily.v1',
   replay: 'petbattle.pvp.replay.v1',
   ranked: 'petbattle.pvp.ranked.v1',
+  /** 每次匹配递增，保证同一分钟内点“刷新对手”也能换人。 */
+  matchNonce: 'petbattle.pvp.matchNonce.v1',
 } as const;
 
 export interface MockPvpStorage {
@@ -261,7 +263,13 @@ export async function mockGetOpponent(
   const pool = nonEggPets(profile);
   const avg = averageLevel(lineup.length > 0 ? lineup : pool);
 
-  const seeds = hash(`${profile.accountId}:${Math.floor(now / 60_000)}:${profile.pvp.rating}:${profile.revision}`);
+  // 同一分钟内刷新也要换人：nonce 持久化，每次匹配 +1。
+  const nonce = ((await storage.get<number>(MOCK_PVP_KEYS.matchNonce)) ?? 0) + 1;
+  await storage.set(MOCK_PVP_KEYS.matchNonce, nonce);
+
+  const seeds = hash(
+    `${profile.accountId}:${nonce}:${Math.floor(now / 60_000)}:${profile.pvp.rating}:${profile.revision}`,
+  );
   const speciesList = cfg.allSpecies().map((species) => species.id);
   const count = clamp((seeds % 3) + 1, 1, Math.min(3, speciesList.length));
   const speciesPreview: string[] = [];

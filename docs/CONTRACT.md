@@ -407,6 +407,7 @@ interface PvpDefenseSnapshot {
 - 冷启动：没有真人候选时用机器人（`botsEnabled=true`）。机器人 `isBot=true`、`displayName="训练师·<物种>"`、`rating=1000`、3 只固定模板（5 物种轮换，等级 = 攻方平均等级钳制在 1~20）。**机器人不计榜、不改段位**。
 - 响应：对手概览 + `challengesRemaining`、`dailyLimit`、`seasonId`。只暴露 `speciesPreview`（物种 id）与 `avgLevel`，不暴露基因、属性、技能、快照。
 - 匹配**不消耗**次数；`fight` 才消耗。
+- 刷新语义：mock 匹配用持久化 nonce，同一分钟内点“刷新对手”也会换人；服务端匹配按候选池排序，未开打前刷新可能仍返回同一对手（M3 可加 `excludeAccountId` 查询参数强制换人）。
 
 #### F-03 异步结算
 

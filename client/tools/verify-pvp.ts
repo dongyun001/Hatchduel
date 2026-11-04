@@ -101,6 +101,8 @@ async function main(): Promise<void> {
   check(opponentRes.challengesRemaining === 10 && opponentRes.dailyLimit === 10, '初始剩余次数应为 10/10');
   check(opponentRes.opponent.speciesPreview.length >= 1 && opponentRes.opponent.speciesPreview.length <= 3, '物种预览应为 1~3');
   check(opponentRes.opponent.avgLevel >= 1 && opponentRes.opponent.avgLevel <= 20, '平均等级应在 1~20');
+  const refreshed = await mockGetOpponent(profile, storage, BASE_TIME, cfg);
+  check(refreshed.opponent.accountId !== opponentRes.opponent.accountId, '同分钟刷新对手应换人');
 
   // —— 真人结算：rating 变化 + 战报 events ——
   const human: PvpOpponentSummary = {
